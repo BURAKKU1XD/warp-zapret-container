@@ -14,7 +14,7 @@ SOCKS: 127.0.0.1:1080
 
 ```bash
 git clone https://github.com/BURAKKU1XD/warp-zapret-container
-cd warp-zapret1-container
+cd warp-zapret-container
 ```
 
 ## Собрать
