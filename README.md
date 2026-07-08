@@ -20,7 +20,7 @@ cd warp-zapret-container
 ## Собрать
 
 ```bash
-docker compose build --no-cache --progress=plain
+docker compose build
 ```
 
 ## Запустить
