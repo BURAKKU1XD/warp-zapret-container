@@ -1,4 +1,4 @@
-# warp-zapret1-container
+# warp-zapret-container
 
 Минимальный Docker-контейнер с Cloudflare WARP + zapret/nfqws, который поднимает локальный HTTP и SOCKS proxy через WARP.
 
@@ -13,7 +13,7 @@ SOCKS: 127.0.0.1:1080
 ## Скачать
 
 ```bash
-git clone https://github.com/BURAKKU1XD/warp-zapret1-container.git
+git clone https://github.com/BURAKKU1XD/warp-zapret-container
 cd warp-zapret1-container
 ```
 
