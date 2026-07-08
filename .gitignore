@@ -1,0 +1,19 @@
+# local backups
+*.tar
+*.tar.gz
+*.zip
+*.log
+*.sha256
+
+# old experiments
+Dockerfile.before-*
+entrypoint.sh.before-*
+entrypoint.inner.sh
+scripts/
+checkpoints/
+image-backups/
+
+# private WARP state - never commit
+warp_state/
+cloudflare-warp/
+var/lib/cloudflare-warp/

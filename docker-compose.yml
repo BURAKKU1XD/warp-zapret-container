@@ -1,23 +1,69 @@
 services:
   warp-zapret1:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: warp-zapret1-container-warp-zapret1:latest
     container_name: warp-zapret1
+
     restart: unless-stopped
-    stop_signal: SIGTERM
-    stop_grace_period: 20s
+    init: true
+
     cap_add:
       - NET_ADMIN
       - NET_RAW
+
     devices:
       - /dev/net/tun:/dev/net/tun
+
     ports:
+      # HTTP proxy
       - "127.0.0.1:8888:8888"
+
+      # SOCKS proxy TCP forward
+      - "127.0.0.1:1080:1080"
+
+    environment:
+      CONFIG: /config/zapret1-warp.conf
+
+      # WARP internal proxy
+      WARP_PROXY_PORT: "40000"
+
+      # Public proxy ports inside container
+      PUBLIC_HTTP_PROXY_PORT: "8888"
+      PUBLIC_SOCKS_PROXY_PORT: "1080"
+
+      # Legacy fallback for old env name
+      PUBLIC_PROXY_PORT: "8888"
+
     volumes:
       - warp_zapret1_state:/var/lib/cloudflare-warp
-      - ./config/zapret1-warp.conf:/config/zapret1-warp.conf:ro
-    environment:
-      WARP_PROXY_PORT: "40000"
-      PUBLIC_PROXY_PORT: "8888"
+
+    tmpfs:
+      - /tmp
+      - /run
+
+    stop_grace_period: 20s
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/bin/bash",
+          "-lc",
+          "warp-cli --accept-tos status | grep -q 'Status update: Connected' && ss -lnt | grep -q ':8888' && ss -lnt | grep -q ':1080'"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   warp_zapret1_state:

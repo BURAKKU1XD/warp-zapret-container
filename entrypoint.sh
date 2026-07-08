@@ -2,10 +2,14 @@
 set -Eeuo pipefail
 
 CONFIG="${CONFIG:-/config/zapret1-warp.conf}"
+
 NFQWS_LOG="/var/log/zapret1-warp-nfqws.log"
 WARP_LOG="/var/log/warp-svc.log"
+
 WARP_PROXY_PORT="${WARP_PROXY_PORT:-40000}"
-PUBLIC_PROXY_PORT="${PUBLIC_PROXY_PORT:-8888}"
+
+PUBLIC_HTTP_PROXY_PORT="${PUBLIC_HTTP_PROXY_PORT:-${PUBLIC_PROXY_PORT:-8888}}"
+PUBLIC_SOCKS_PROXY_PORT="${PUBLIC_SOCKS_PROXY_PORT:-1080}"
 
 source "$CONFIG"
 
@@ -25,11 +29,24 @@ cleanup_rules() {
     -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass 2>/dev/null; do true; done
 }
 
+kill_pid() {
+  local pid="${1:-}"
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+  fi
+}
+
 cleanup() {
   set +e
-  kill "${SOCAT_PID:-}" 2>/dev/null || true
-  kill "${WARP_PID:-}" 2>/dev/null || true
-  kill "${NFQWS_PID:-}" 2>/dev/null || true
+
+  echo "[+] cleanup"
+
+  kill_pid "${SOCAT_HTTP_PID:-}"
+  kill_pid "${SOCAT_SOCKS_PID:-}"
+  kill_pid "${SOCAT_PID:-}"
+  kill_pid "${WARP_PID:-}"
+  kill_pid "${NFQWS_PID:-}"
+
   cleanup_rules
 }
 trap cleanup INT TERM EXIT
@@ -138,7 +155,7 @@ echo "[+] WARP status"
 warp-cli --accept-tos status || true
 warp-cli --accept-tos tunnel stats || true
 ss -tunap | grep warp || true
-ss -lntup | grep -E "$WARP_PROXY_PORT|$PUBLIC_PROXY_PORT" || true
+ss -lntup | grep -E "$WARP_PROXY_PORT|$PUBLIC_HTTP_PROXY_PORT|$PUBLIC_SOCKS_PROXY_PORT" || true
 
 if [ "$CONNECTED" != "1" ]; then
   echo "[!] WARP did not become Connected or local proxy did not listen"
@@ -151,11 +168,40 @@ if [ "$CONNECTED" != "1" ]; then
   exit 1
 fi
 
-echo "[+] exposing HTTP proxy 0.0.0.0:$PUBLIC_PROXY_PORT -> 127.0.0.1:$WARP_PROXY_PORT"
-socat TCP-LISTEN:"$PUBLIC_PROXY_PORT",fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:"$WARP_PROXY_PORT" &
-SOCAT_PID="$!"
+echo "[+] exposing HTTP proxy 0.0.0.0:$PUBLIC_HTTP_PROXY_PORT -> 127.0.0.1:$WARP_PROXY_PORT"
+socat TCP-LISTEN:"$PUBLIC_HTTP_PROXY_PORT",fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:"$WARP_PROXY_PORT" &
+SOCAT_HTTP_PID="$!"
+
+echo "[+] exposing SOCKS proxy 0.0.0.0:$PUBLIC_SOCKS_PROXY_PORT -> 127.0.0.1:$WARP_PROXY_PORT"
+socat TCP-LISTEN:"$PUBLIC_SOCKS_PROXY_PORT",fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:"$WARP_PROXY_PORT" &
+SOCAT_SOCKS_PID="$!"
 
 echo "[+] ready"
-echo "[+] test from host: curl -x http://127.0.0.1:$PUBLIC_PROXY_PORT https://www.cloudflare.com/cdn-cgi/trace"
+echo "[+] test HTTP from host:  curl -x http://127.0.0.1:$PUBLIC_HTTP_PROXY_PORT https://www.cloudflare.com/cdn-cgi/trace"
+echo "[+] test SOCKS from host: curl --socks5-hostname 127.0.0.1:$PUBLIC_SOCKS_PROXY_PORT https://www.cloudflare.com/cdn-cgi/trace"
 
-wait "$WARP_PID"
+while true; do
+  if ! kill -0 "$NFQWS_PID" 2>/dev/null; then
+    echo "[!] nfqws exited"
+    tail -n 200 "$NFQWS_LOG" || true
+    exit 1
+  fi
+
+  if ! kill -0 "$WARP_PID" 2>/dev/null; then
+    echo "[!] warp-svc exited"
+    tail -n 260 "$WARP_LOG" || true
+    exit 1
+  fi
+
+  if ! kill -0 "$SOCAT_HTTP_PID" 2>/dev/null; then
+    echo "[!] HTTP socat exited"
+    exit 1
+  fi
+
+  if ! kill -0 "$SOCAT_SOCKS_PID" 2>/dev/null; then
+    echo "[!] SOCKS socat exited"
+    exit 1
+  fi
+
+  sleep 5
+done
