@@ -1,0 +1,23 @@
+services:
+  warp-zapret1:
+    build: .
+    container_name: warp-zapret1
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    stop_grace_period: 20s
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - warp_zapret1_state:/var/lib/cloudflare-warp
+      - ./config/zapret1-warp.conf:/config/zapret1-warp.conf:ro
+    environment:
+      WARP_PROXY_PORT: "40000"
+      PUBLIC_PROXY_PORT: "8888"
+
+volumes:
+  warp_zapret1_state:

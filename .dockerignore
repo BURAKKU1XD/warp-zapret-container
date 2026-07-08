@@ -1,0 +1,9 @@
+.git
+scripts
+checkpoints
+image-backups
+*.tar
+*.tar.gz
+*.log
+Dockerfile.before-*
+entrypoint.sh.before-*
