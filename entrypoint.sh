@@ -65,6 +65,8 @@ test -s /config/lists/ipset-all.txt
 test -s /opt/zapret/files/fake/quic_initial_www_google_com.bin
 test -s /opt/zapret/files/fake/tls_clienthello_www_google_com.bin
 test -s /opt/zapret/files/fake/stun.bin
+test -s /opt/zapret/files/fake/ACTIVE_DISCORD_UDP.bin
+test -s /opt/zapret/files/fake/tls_clienthello_www_sferum_ru.bin
 
 echo "[+] starting nfqws"
 : > "$NFQWS_LOG"

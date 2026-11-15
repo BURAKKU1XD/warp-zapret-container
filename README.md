@@ -104,3 +104,32 @@ warp_zapret1_state:/var/lib/cloudflare-warp
 По умолчанию proxy доступен только с localhost.
 
 Используется zapret1, если конфиг умрет, поменяйте в /config
+
+## Стратегия zapret
+
+`config/zapret1-warp.conf` адаптирован из `general (ALT12).bat` проекта
+`zapret-discord-youtube` версии `1.10.4`: семь основных профилей в исходном
+порядке, без дополнительных профилей Game Filter (в исходном архиве он выключен).
+Параметры WinDivert `--wf-tcp`/`--wf-udp` заменены существующими правилами
+Linux OUTPUT/NFQUEUE; границы перехвата пакетов для WARP сохранены.
+Списки доменов/IP и пользовательские исключения не заменялись.
+
+Payload-файлы `ACTIVE_DISCORD_UDP.bin` и `tls_clienthello_www_sferum_ru.bin`
+взяты из того же архива; существующие Google QUIC/TLS и STUN совпадают с ним
+по SHA-256. Смена стратегии не является подтверждённым исправлением утечки памяти.
+
+Конфиг и payload-файлы включены в образ: после изменения нужна пересборка.
+До запуска WARP можно проверить аргументы настоящим nfqws без регистрации,
+сетевого перехвата и изменения состояния:
+
+```bash
+docker compose build
+docker compose run --rm --no-deps --entrypoint /usr/bin/bash warp-zapret1 -lc \
+  'set -e; source /config/zapret1-warp.conf; exec /usr/local/bin/nfqws --dry-run --qnum="$NFQUEUE_NUM" "${NFQWS_ARGS[@]}"'
+```
+
+Регрессионная проверка профилей и payload-файлов (Python 3 и Docker):
+
+```bash
+python -m unittest discover -s tests -v
+```

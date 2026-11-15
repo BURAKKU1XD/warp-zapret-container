@@ -17,3 +17,6 @@ image-backups/
 warp_state/
 cloudflare-warp/
 var/lib/cloudflare-warp/
+
+# Python regression tests
+__pycache__/
