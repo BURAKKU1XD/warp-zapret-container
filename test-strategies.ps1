@@ -50,8 +50,10 @@ function Invoke-Docker {
 
 function Test-Probe {
     param([string]$Proxy, [string]$Url, [string]$Type, [string]$Protocol, [string]$Kind)
-    $bypass = if ($Kind -eq 'DIRECT') { '*' } else { ',' }
-    $curlArgs = @('--disable', '--silent', '--proxy', $Proxy, '--noproxy', $bypass,
+    # Feed the literal bypass rule through stdin: Unix PowerShell expands '*'
+    # in native argv, while Windows PowerShell 5.1 drops empty native arguments.
+    $routeArgs = if ($Kind -eq 'DIRECT') { @('--proxy', $Proxy, '--config', '-') } else { @('--proxy', $Proxy, '--noproxy', ',') }
+    $curlArgs = @('--disable', '--silent') + $routeArgs + @(
         '--connect-timeout', "$RequestTimeout", '--max-time', "$RequestTimeout",
         '--proto', '=https', '--proto-redir', '=https', '--location', '--max-redirs', '3',
         '--write-out', "`n%{http_code}`t%{time_total}`t%{size_download}`t%{time_starttransfer}")
@@ -69,7 +71,8 @@ function Test-Probe {
     }
     $curlArgs += $Url
     $ErrorActionPreference = 'Continue'
-    $raw = @(& curl.exe @curlArgs 2>$null)
+    if ($Kind -eq 'DIRECT') { $raw = @('noproxy = "*"' | & curl.exe @curlArgs 2>$null) }
+    else { $raw = @(& curl.exe @curlArgs 2>$null) }
     $exit = $LASTEXITCODE
     $text = $raw -join "`n"
     $http = '000'; $seconds = '0'; $bytes = '0'; $ttfb = '0'

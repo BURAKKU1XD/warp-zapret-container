@@ -80,7 +80,12 @@ class DnsTests(unittest.TestCase):
 
     def test_entrypoint_configures_dns_before_starting_services(self):
         entrypoint = (ROOT / "entrypoint.sh").read_text(encoding="utf-8")
-        self.assertLess(entrypoint.index("configure_dns\n"), entrypoint.index("# Runtime starts here."))
+        # Loading definitions must not alter DNS. Runtime setup still precedes
+        # the watchdog and all network services.
+        setup = entrypoint.index("configure_dns\n")
+        self.assertLess(entrypoint.index("# Runtime starts here."), setup)
+        self.assertLess(setup, entrypoint.index('watchdog "$$"'))
+        self.assertLess(setup, entrypoint.index("\ndbus-daemon --system"))
         # --dry-run must remain side-effect free.
         self.assertLess(entrypoint.index('if [ "$DRY_RUN" = 1 ]'), entrypoint.index("configure_dns\n"))
 

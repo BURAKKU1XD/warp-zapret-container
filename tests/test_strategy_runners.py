@@ -83,8 +83,13 @@ elif tool == 'curl':
     assert '--insecure' not in args and '--head' not in args
     assert args[args.index('--proto')+1]=='=https'
     assert '--proto-redir' in args and '--max-redirs' in args
+    direct='--config' in args
     proxy=args[args.index('--proxy')+1]
-    direct=args[args.index('--noproxy')+1]=='*'
+    if direct:
+        assert args[args.index('--config')+1]=='-'
+        assert sys.stdin.read().strip()=='noproxy = "*"'
+    else:
+        assert args[args.index('--noproxy')+1]==','
     if not direct and (proxy.endswith(':1') or state.get('stopped')):
         if scenario=='guard-bypass': result(); sys.exit(0)
         result('000'); sys.exit(7)
@@ -172,7 +177,8 @@ class RunnerTests(unittest.TestCase):
             prefix = "& " + quote(sys.executable) + " " + quote(mock)
             script = (
                 "function global:docker { " + prefix + " docker @args }\n"
-                "function global:curl.exe { " + prefix + " curl @args }\n"
+                "function global:curl.exe { if ($args -contains '--config') { $input | " +
+                prefix + " curl @args } else { " + prefix + " curl @args } }\n"
                 "& " + quote(ROOT / "test-strategies.ps1") +
                 f" -Image mock:test -Pull {pull} -Rounds {rounds} -Connections {connections} -StartupTimeout 1 -RequestTimeout 1" +
                 " -TargetsFile " + quote(target_file) + " -OutputDirectory " + quote(output)
@@ -214,11 +220,12 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual([r['status'] for r in summary],
                                  ['REFERENCE', 'AVAILABLE', 'AVAILABLE', 'STARTUP_FAIL', 'PARTIAL', 'PARTIAL', 'PARTIAL', 'STARTUP_FAIL'])
                 self.assertEqual(summary[2]['passed'], '8')
+                self.assertEqual(summary[0]['passed'], '4')
                 self.assertEqual(summary[2]['effect'], 'WARP_WORKS_WITHOUT_ZAPRET')
                 self.assertEqual({r['protocol'] for r in checks}, {'DEFAULT','HTTP1.1','TLS1.2','TLS1.3'})
                 self.assertEqual(remaining, {})
                 curls = [c for c in commands if c[0]=='curl']
-                direct = [i for i,c in enumerate(commands) if c[0]=='curl' and c[c.index('--noproxy')+1]=='*']
+                direct = [i for i,c in enumerate(commands) if c[0]=='curl' and '--config' in c]
                 creates = [i for i,c in enumerate(commands) if c[:2]==['docker','create']]
                 self.assertLess(max(direct),min(creates))
                 self.assertIn('--without-zapret',commands[creates[0]])
@@ -344,11 +351,11 @@ class RunnerTests(unittest.TestCase):
             try:
                 result = subprocess.run(
                     [curl, '--disable', '--silent', '--show-error', '--proxy', 'http://127.0.0.1:1',
-                     '--noproxy', '*', '--max-time', '3', '--proto', '=https',
+                     '--config', '-', '--max-time', '3', '--proto', '=https',
                      f'https://127.0.0.1:{listener.getsockname()[1]}/'],
                     env=dict(os.environ, HTTPS_PROXY='http://invalid.invalid:9',
                              ALL_PROXY='socks5h://invalid.invalid:9'),
-                    capture_output=True, timeout=6,
+                    input=b'noproxy = "*"\n', capture_output=True, timeout=6,
                 )
                 self.assertNotEqual(result.returncode, 0)  # local peer has no TLS certificate
             finally:

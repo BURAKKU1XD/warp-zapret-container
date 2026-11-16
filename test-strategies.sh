@@ -171,13 +171,14 @@ UPLOAD_HASH="$(sha256sum < "$REPORT/upload.tmp")"; UPLOAD_HASH=${UPLOAD_HASH%% *
 
 declare -A CONTROL_GOOD CONTROL_BAD CURRENT_GOOD CURRENT_BAD
 DIRECT_CLEAN=1
-# Always use a nonempty native argument; --noproxy '*' enforces direct mode.
+# Feed the literal bypass rule through stdin, without native wildcard expansion.
 probe() {
   local proxy="$1" url="$2" type="$3" protocol="$4" output meta body="" digest=""
   exit_code=0
-  local bypass="," sink=/dev/null
-  [[ "$kind" != DIRECT ]] || bypass='*'
-  local args=(--disable --silent --proxy "$proxy" --noproxy "$bypass"
+  local sink=/dev/null
+  local route_args=(--proxy "$proxy" --noproxy ",")
+  [[ "$kind" != DIRECT ]] || route_args=(--proxy "$proxy" --config -)
+  local args=(--disable --silent "${route_args[@]}"
     --connect-timeout "$REQUEST_TIMEOUT" --max-time "$REQUEST_TIMEOUT"
     --proto '=https' --proto-redir '=https' --location --max-redirs 3
     --write-out $'\n%{http_code}\t%{time_total}\t%{size_download}\t%{time_starttransfer}')
@@ -197,7 +198,11 @@ probe() {
       args+=(--output "$sink") ;;
     *) args+=(--output "$sink") ;;
   esac
-  output="$(curl "${args[@]}" "$url" 2>/dev/null)" || exit_code=$?
+  if [[ "$kind" == DIRECT ]]; then
+    output="$(printf '%s\n' 'noproxy = "*"' | curl "${args[@]}" "$url" 2>/dev/null)" || exit_code=$?
+  else
+    output="$(curl "${args[@]}" "$url" 2>/dev/null)" || exit_code=$?
+  fi
   meta="${output##*$'\n'}"
   meta="${meta%$'\r'}"
   IFS=$'\t' read -r code elapsed bytes ttfb <<< "$meta"
