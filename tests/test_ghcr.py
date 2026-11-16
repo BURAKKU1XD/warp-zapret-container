@@ -33,6 +33,7 @@ def run_block(step_id, environment=None):
         "GITHUB_SERVER_URL": "https://github.com",
         "GITHUB_SHA": SHA, "GITHUB_REF": "refs/heads/main", "GITHUB_REF_NAME": "main",
         "GITHUB_OUTPUT": "/tmp/step-output", "GITHUB_STEP_SUMMARY": "/tmp/step-summary",
+        "GITHUB_ENV": "/tmp/step-env",
         "RUNNER_TEMP": "/tmp", "LOCAL_IMAGE": "local-fixture:latest",
         "TESTED_IMAGE_ID": "sha256:fixture", "GITHUB_ACTOR": "fixture",
         "GHCR_TOKEN": "synthetic-test-token", "MOCK_IMAGE_ID": "sha256:fixture",
@@ -43,6 +44,7 @@ def run_block(step_id, environment=None):
     script = setup + r"""
 : > /tmp/step-output
 : > /tmp/step-summary
+: > /tmp/step-env
 : > /tmp/docker-calls
 docker() {
   printf 'DOCKER' >> /tmp/docker-calls
@@ -70,12 +72,19 @@ set -euo pipefail
 )
 code=$?
 printf 'CHECK_EXIT=%s\n' "$code"
-cat /tmp/step-output /tmp/docker-calls /tmp/step-summary
+cat /tmp/step-output /tmp/docker-calls /tmp/step-summary /tmp/step-env
 """
     return run_in_image(script).decode()
 
 
 class GhcrTests(unittest.TestCase):
+    def test_registry_config_uses_runtime_env_not_unavailable_job_context(self):
+        output = run_block("docker_config")
+        self.assertIn("CHECK_EXIT=0", output)
+        self.assertIn("DOCKER_CONFIG=/tmp/ghcr-docker", output)
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("DOCKER_CONFIG: ${{ runner.temp }}", workflow)
+
     def test_build_selects_amd64_and_labels_public_source_revision(self):
         output = run_block("build")
         self.assertIn("CHECK_EXIT=0", output)
