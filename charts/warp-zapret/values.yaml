@@ -9,6 +9,10 @@ imagePullSecrets: []
 fullnameOverride: ""
 
 strategy: general
+# Used for both Pod DNS and the container's DNS_SERVERS environment variable.
+dnsServers:
+  - "1.1.1.1"
+  - "8.8.8.8"
 podAnnotations: {}
 
 resources:

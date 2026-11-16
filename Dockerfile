@@ -224,6 +224,7 @@ FROM scratch
 LABEL warp_zapret_slim="scratch-rootfs-no-ubuntu-base"
 
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ENV DNS_SERVERS="1.1.1.1 8.8.8.8"
 
 COPY --from=rootfs-build /rootfs/ /
 

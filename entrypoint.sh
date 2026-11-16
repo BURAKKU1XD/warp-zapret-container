@@ -75,6 +75,8 @@ fi
 
 source /runtime.sh
 
+configure_dns
+
 cleanup_rules() {
   while iptables -t mangle -D OUTPUT \
     -p udp -m multiport --dports "$NFQWS_PORTS_UDP" ! -d 127.0.0.0/8 \

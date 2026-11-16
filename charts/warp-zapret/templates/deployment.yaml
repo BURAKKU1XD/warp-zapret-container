@@ -22,6 +22,10 @@ spec:
       {{- end }}
     spec:
       automountServiceAccountToken: false
+      dnsPolicy: None
+      dnsConfig:
+        nameservers:
+          {{- toYaml .Values.dnsServers | nindent 10 }}
       terminationGracePeriodSeconds: 20
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -46,6 +50,8 @@ spec:
           env:
             - name: ZAPRET_STRATEGY
               value: {{ .Values.strategy | quote }}
+            - name: DNS_SERVERS
+              value: {{ join " " .Values.dnsServers | quote }}
             - name: MALLOC_TRIM_THRESHOLD_
               value: "1048576"
             - name: MALLOC_MMAP_THRESHOLD_

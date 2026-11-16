@@ -43,6 +43,19 @@ class ChartTests(unittest.TestCase):
         result = helm("lint", CHART, "--strict")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_dns_defaults_and_override_reach_pod_and_container(self):
+        for servers in (["1.1.1.1", "8.8.8.8"], ["9.9.9.9"],
+                        ["10.0.0.53", "1.0.0.1", "8.8.4.4"]):
+            with self.subTest(servers=servers):
+                actual = self.default if servers == ["1.1.1.1", "8.8.8.8"] else render({
+                    "dnsServers": servers,
+                })
+                pod = actual["Deployment"]["spec"]["template"]["spec"]
+                self.assertEqual(pod["dnsPolicy"], "None")
+                self.assertEqual(pod["dnsConfig"], {"nameservers": servers})
+                env = {v["name"]: v["value"] for v in pod["containers"][0]["env"]}
+                self.assertEqual(env["DNS_SERVERS"], " ".join(servers))
+
     def test_packaged_chart_renders_the_same_resources(self):
         with tempfile.TemporaryDirectory(prefix="warp-helm-package-") as directory:
             result = helm("package", CHART, "--destination", directory)
@@ -198,6 +211,11 @@ class ChartTests(unittest.TestCase):
 
     def test_schema_rejects_invalid_runtime_inputs(self):
         cases = [
+            {"dnsServers": []},
+            {"dnsServers": ["1.1.1.1"] * 4},
+            {"dnsServers": ["256.1.1.1"]},
+            {"dnsServers": ["dns.example.test"]},
+            {"dnsServers": ["01.1.1.1"]},
             {"strategy": "../custom"},
             {"strategy": "missing"},
             {"nodeSelector": {"kubernetes.io/arch": "arm64"}},

@@ -24,6 +24,7 @@ services:
 
     environment:
       ZAPRET_STRATEGY: "${ZAPRET_STRATEGY:-general}"
+      DNS_SERVERS: "${DNS_SERVERS:-1.1.1.1 8.8.8.8}"
 
       # Balanced glibc reuse/release thresholds (1 MiB).
       MALLOC_TRIM_THRESHOLD_: "1048576"
