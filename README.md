@@ -8,27 +8,44 @@
 
 ## Запуск
 
-Для запуска достаточно двух файлов в одной папке: [compose.yaml](compose.yaml)
-и [.env.example](.env.example), сохранённого под именем `.env`.
-Стратегии, списки и fake-пакеты уже находятся в образе; папку `config`
-монтировать не требуется. В `.env` задаются образ и выбранная стратегия:
+Одна команда создаёт папку `warp-zapret`, скачивает из GitHub только
+[compose.yaml](compose.yaml) и [.env.example](.env.example) под именем `.env`,
+затем скачивает готовый образ из GHCR и запускает контейнер.
+Нужны Docker Compose и `curl` (`curl.exe` в Windows).
+
+**Linux / Bash:**
+
+```bash
+mkdir warp-zapret && cd warp-zapret && curl -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/compose.yaml -o compose.yaml && curl -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/.env.example -o .env && docker compose up -d --pull always
+```
+
+**Windows / PowerShell:**
+
+```powershell
+cmd /c "mkdir warp-zapret && cd warp-zapret && curl.exe -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/compose.yaml -o compose.yaml && curl.exe -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/.env.example -o .env && docker compose up -d --pull always"
+```
+
+Команда предназначена для первой установки: папка `warp-zapret` должна отсутствовать.
+При ошибке скачивания запуск не выполняется. Последующие команды выполняйте
+из созданной папки `warp-zapret`.
+
+По умолчанию Compose использует `ghcr.io/burakku1xd/warp-zapret-container:latest`.
+Стратегии, списки и fake-пакеты находятся в образе. В `.env` выбирается стратегия:
 
 ```dotenv
-WARP_ZAPRET_IMAGE=ghcr.io/burakku1xd/warp-zapret-container:latest
 ZAPRET_STRATEGY=general
 ```
 
-Выполните в этой папке:
+Посмотреть запуск:
 
 ```bash
-docker compose pull
-docker compose up -d
 docker compose logs -f warp-zapret
 ```
 
 Образ должен быть опубликован в GHCR и доступен для скачивания. Для обновления
 повторите `docker compose pull` и `docker compose up -d`. Для фиксации версии
-замените `latest` в `.env` на опубликованный тег версии или `sha-<полный SHA коммита>`.
+добавьте в `.env` переменную `WARP_ZAPRET_IMAGE` с полным именем образа и
+опубликованным тегом версии или `sha-<полный SHA коммита>`.
 
 При переходе с `docker-compose.yml` используйте прежнюю папку проекта и замените
 старый файл на `compose.yaml`. Если старый контейнер называется `warp-zapret1`,
