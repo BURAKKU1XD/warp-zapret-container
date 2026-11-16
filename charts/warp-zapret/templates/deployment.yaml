@@ -75,7 +75,7 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 12
             failureThreshold: 2
-          # Restart on a dead local listener, not a temporary internet outage.
+          # Local fallback; the image watchdog also restarts after 5 failed HTTPS checks.
           livenessProbe:
             tcpSocket:
               port: http-proxy

@@ -87,7 +87,7 @@ class HealthcheckTests(unittest.TestCase):
         ).stdout)[0]
         self.assertEqual(image["Config"]["Healthcheck"], {
             "Test": ["CMD", "/healthcheck.sh"], "Interval": 30000000000,
-            "Timeout": 12000000000, "StartPeriod": 120000000000, "Retries": 3,
+            "Timeout": 12000000000, "StartPeriod": 120000000000, "Retries": 5,
         })
         service = json.loads(subprocess.run(
             ["docker", "compose", "config", "--format", "json"],
@@ -95,7 +95,7 @@ class HealthcheckTests(unittest.TestCase):
         ).stdout)["services"]["warp-zapret"]
         self.assertEqual(service["healthcheck"], {
             "test": ["CMD", "/healthcheck.sh"], "interval": "30s",
-            "timeout": "12s", "start_period": "2m0s", "retries": 3,
+            "timeout": "12s", "start_period": "2m0s", "retries": 5,
         })
 
     def test_success_uses_both_explicit_proxies_and_bounded_verified_https(self):

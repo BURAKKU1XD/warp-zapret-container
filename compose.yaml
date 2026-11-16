@@ -52,7 +52,7 @@ services:
       test: ["CMD", "/healthcheck.sh"]
       interval: 30s
       timeout: 12s
-      retries: 3
+      retries: 5
       start_period: 120s
 
     logging:

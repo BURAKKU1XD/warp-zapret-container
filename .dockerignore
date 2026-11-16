@@ -4,6 +4,7 @@
 !Dockerfile
 !entrypoint.sh
 !healthcheck.sh
+!runtime.sh
 !LICENSE
 !THIRD_PARTY_NOTICES.md
 !licenses/

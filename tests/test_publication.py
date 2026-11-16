@@ -45,7 +45,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_real_docker_context_contains_only_allowed_public_inputs(self):
         public = [
-            "Dockerfile", "entrypoint.sh", "healthcheck.sh", "LICENSE",
+            "Dockerfile", "entrypoint.sh", "healthcheck.sh", "runtime.sh", "LICENSE",
             "THIRD_PARTY_NOTICES.md", "licenses/upstream.txt",
             "config/strategies/general.conf", "assets/fake/public.bin",
             "assets/lists/public.txt",
@@ -88,7 +88,7 @@ class PublicationTests(unittest.TestCase):
         )
 
     def test_linux_line_endings_and_original_batch_bytes_are_preserved(self):
-        paths = ["entrypoint.sh", "healthcheck.sh", "Dockerfile",
+        paths = ["entrypoint.sh", "healthcheck.sh", "runtime.sh", "Dockerfile",
                  "compose.yaml", ".github/workflows/ci.yml"]
         for name in paths:
             with self.subTest(file=name):

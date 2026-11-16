@@ -17,7 +17,7 @@ from tools.import_strategies import import_release, parse_batch, strategy_name
 FIXTURES = ROOT / "tests/fixtures/strategies-1.10.4"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
 PREFIX = r'''source <(while IFS= read -r line; do
-  [[ "$line" == 'trap cleanup INT TERM EXIT' ]] && break
+  [[ "$line" == '# Runtime starts here.' ]] && break
   printf '%s\n' "$line"
 done < /entrypoint.sh)
 printf '%s\0' "${NFQWS_ARGS[@]}"

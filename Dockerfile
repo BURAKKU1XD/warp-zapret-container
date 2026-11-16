@@ -192,6 +192,7 @@ COPY config/zapret1-warp.conf /rootfs/config/zapret1-warp.conf
 COPY config/strategies /rootfs/config/strategies
 COPY entrypoint.sh /rootfs/entrypoint.sh
 COPY healthcheck.sh /rootfs/healthcheck.sh
+COPY runtime.sh /rootfs/runtime.sh
 
 RUN set -eux; \
     sed -i '1s|^#!/usr/bin/env bash|#!/usr/bin/bash|' /rootfs/entrypoint.sh; \
@@ -226,7 +227,7 @@ ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 COPY --from=rootfs-build /rootfs/ /
 
-HEALTHCHECK --interval=30s --timeout=12s --start-period=120s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=12s --start-period=120s --retries=5 \
   CMD ["/healthcheck.sh"]
 
 ENTRYPOINT ["/entrypoint.sh"]

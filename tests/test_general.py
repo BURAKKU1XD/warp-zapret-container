@@ -22,7 +22,8 @@ def run_in_image(script, net_admin=False):
     capabilities = ["--cap-add", "NET_ADMIN"] if net_admin else []
     result = subprocess.run(
         [
-            "docker", "run", "--rm", "--network", "none",
+            # Individual health-state tests enable their own explicit probes.
+            "docker", "run", "--rm", "--network", "none", "--no-healthcheck",
             *capabilities,
             "--entrypoint", "/usr/bin/bash", IMAGE, "-c", script,
         ],
@@ -103,7 +104,7 @@ class GeneralTests(unittest.TestCase):
         output = run_in_image(
             r'''set -eu
 source <(while IFS= read -r line; do
-  [[ "$line" == 'trap cleanup INT TERM EXIT' ]] && break
+  [[ "$line" == '# Runtime starts here.' ]] && break
   printf '%s\n' "$line"
 done < /entrypoint.sh)
 iptables -t mangle -A OUTPUT -m mark --mark 0x40000000/0x40000000 -j ACCEPT
