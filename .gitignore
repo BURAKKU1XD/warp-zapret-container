@@ -21,6 +21,7 @@ var/lib/cloudflare-warp/
 # Python regression tests
 __pycache__/
 *.py[cod]
+/test-results/
 
 # Local development/diagnostics (kept on disk, never published).
 /.planning/

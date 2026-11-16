@@ -1,56 +1,41 @@
 # warp-zapret-container
 
-Локальный HTTP- и SOCKS5-прокси через Cloudflare WARP с zapret/nfqws.
-WARP работает по MASQUE; через него идут только приложения с настроенным
-прокси, а не весь трафик хоста.
+Локальный HTTP/SOCKS5-прокси через Cloudflare WARP + zapret.
+Проект экспериментальный: подключение зависит от сети.
 
-**Проект экспериментальный.** Подключение зависит от сети: первая регистрация
-WARP без внешнего VPN и длительная стабильность не гарантируются.
+Нужны Docker с Compose v2, Linux amd64 (или Docker Desktop с Linux-контейнерами),
+`/dev/net/tun` и поддержка ядром iptables/NFQUEUE.
 
-| Прокси | Адрес |
-|---|---|
-| HTTP / HTTPS CONNECT | `http://127.0.0.1:8888` |
-| SOCKS5 | `socks5h://127.0.0.1:1080` |
-
-## Требования
-
-- Linux x86-64/amd64 с Docker Engine и Compose v2 либо Docker Desktop
-  в режиме Linux-контейнеров. ARM64 не поддерживается.
-- Доступный `/dev/net/tun`, поддержка ядром iptables/NFQUEUE и connbytes.
-  Capabilities `NET_ADMIN` и `NET_RAW` уже заданы в Compose.
-- Доступ к GitHub, Ubuntu и Cloudflare APT при сборке, к WARP API
-  и серверам WARP при запуске.
-
-## Как запустить
-
-Команды рассчитаны на Bash. Скачайте проект и создайте `.env`:
+## Запуск
 
 ```bash
 git clone https://github.com/BURAKKU1XD/warp-zapret-container.git
 cd warp-zapret-container
 cp .env.example .env
-```
-
-В `.env` выберите стратегию. По умолчанию:
-
-```dotenv
-ZAPRET_STRATEGY=general
-```
-
-Соберите и запустите контейнер:
-
-```bash
 docker compose up -d --build
 docker compose logs -f warp-zapret1
 ```
 
-Дождитесь `[+] ready`, затем проверьте прокси командами ниже.
-`Ctrl+C` закрывает просмотр логов, контейнер продолжает работать.
-При первом запуске создаётся регистрация WARP, затем используется сохранённая.
+Дождитесь `[+] ready`. `Ctrl+C` закроет логи, но не остановит контейнер.
 
-## Список стратегий
+Укажите прокси в нужном приложении:
 
-В образ включены **22 стратегии** из `zapret-discord-youtube` версии `1.10.4`:
+| Тип | Адрес |
+|---|---|
+| HTTP / HTTPS CONNECT | `http://127.0.0.1:8888` |
+| SOCKS5 | `socks5h://127.0.0.1:1080` |
+
+Проверка обоих прокси:
+
+```bash
+docker exec warp-zapret1 /healthcheck.sh
+```
+
+Успешный результат: `healthy: HTTP and SOCKS HTTPS verified, warp=on`.
+
+## Стратегии
+
+По умолчанию — `general`. Доступны 22 варианта:
 
 ```text
 general
@@ -77,126 +62,116 @@ simple-fake-alt
 simple-fake-alt2
 ```
 
-Начните с `general`. `alt5` помечен автором исходника как **NOT RECOMMENDED**,
-`exp` — экспериментальный. Универсально рабочей стратегии нет,
-автоматического перебора тоже нет.
-
-### Как сменить стратегию
-
-Измените существующую строку в `.env`, например:
+Чтобы сменить стратегию, измените строку в `.env`, например:
 
 ```dotenv
 ZAPRET_STRATEGY=alt12
 ```
 
-Пересоздайте контейнер:
+Примените без пересборки:
 
 ```bash
 docker compose up -d --no-build --force-recreate
 ```
 
-Пересборка не нужна: все стратегии уже в образе.
-`docker compose restart` изменения `.env` не применяет.
-Конфиги находятся в [config/strategies](config/strategies).
+`alt5` не рекомендован автором исходника, `exp` — экспериментальный.
 
-## Проверка
+## Автоматическая проверка стратегий
 
-Проверьте HTTP и SOCKS5 с хоста:
+В корне есть два независимых скрипта: [Linux/Bash](test-strategies.sh)
+и [Windows/PowerShell](test-strategies.ps1). Нужны локальный Docker с
+Linux-контейнерами amd64 и `curl` (`curl.exe` в Windows); Python не нужен.
+Для Windows подходит PowerShell 5.1 или новее. Требования к TUN/NFQUEUE
+те же, что при обычном запуске.
 
-```bash
-curl --fail --show-error --max-time 15 --noproxy "" -x http://127.0.0.1:8888 https://www.cloudflare.com/cdn-cgi/trace
-curl --fail --show-error --max-time 15 --noproxy "" --socks5-hostname 127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
-```
+По умолчанию скрипт скачивает образ из GHCR, если его ещё нет локально,
+и последовательно проверяет все стратегии из этого образа.
 
-В обоих ответах должна быть строка `warp=on`. В PowerShell при необходимости
-используйте `curl.exe`. Полный ответ содержит внешний IP — не публикуйте его.
+### Скачать и запустить одной командой
 
-Состояние контейнера и встроенная проверка обоих прокси:
+Клонировать репозиторий не нужно. Выполните команду в отдельной пустой папке:
+скрипт сохранится в ней, отчёты появятся рядом в `test-results/`.
+Команды сразу исполняют код из ветки `main` — используйте только доверенный
+источник. При ошибке скачивания запуск не выполняется.
 
-```bash
-docker compose ps
-docker exec warp-zapret1 /healthcheck.sh
-```
-
-`Connected` и `[+] ready` сами по себе не доказывают доступность сайтов.
-Healthcheck проверяет HTTPS через оба прокси каждые 30 секунд.
-**Статус `unhealthy` не вызывает автоматический перезапуск контейнера.**
-
-## Запуск без сборки: GHCR
-
-Если образ опубликован и доступен вам, задайте в `.env`:
-
-```dotenv
-WARP_ZAPRET_IMAGE=ghcr.io/burakku1xd/warp-zapret-container:latest
-ZAPRET_STRATEGY=general
-```
-
-Затем вместо локальной сборки:
+**Linux:**
 
 ```bash
-docker compose pull
-docker compose up -d --no-build
+curl -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/test-strategies.sh -o test-strategies.sh && bash ./test-strategies.sh
 ```
 
-Это настроенный адрес публикации, а не гарантия доступности пакета.
-Для анонимного скачивания владелец должен сделать пакет Public;
-приватный пакет требует входа в GHCR. Токены в `.env` и Git не сохраняйте.
+**Windows (PowerShell):**
 
-## Управление
+```powershell
+curl.exe -fsSL https://raw.githubusercontent.com/BURAKKU1XD/warp-zapret-container/main/test-strategies.ps1 -o test-strategies.ps1; if ($LASTEXITCODE -eq 0) { .\test-strategies.ps1 }
+```
+
+### Запуск из скачанного репозитория
 
 ```bash
-# Остановить.
-docker compose stop
-
-# Запустить остановленный контейнер.
-docker compose start
-
-# Удалить контейнер и сеть, сохранив регистрацию.
-docker compose down
+# Linux
+bash ./test-strategies.sh
 ```
 
-Чтобы изменить порты, замените левую часть проброса в `docker-compose.yml`:
-
-```yaml
-ports:
-  - "127.0.0.1:8889:8888"
-  - "127.0.0.1:1081:1080"
+```powershell
+# Windows
+.\test-strategies.ps1
 ```
 
-Примените через `docker compose up -d --no-build --force-recreate`.
-В этом примере подключайтесь к HTTP на `8889`, SOCKS5 на `1081`.
+Если политика PowerShell запрещает запуск скачанного файла, проверьте его
+содержимое и разблокируйте только этот файл: `Unblock-File .\test-strategies.ps1`.
+Доступность GHCR-пакета зависит от его публикации и прав доступа.
 
-## Важно
-
-- Прокси **без аутентификации**. Сохраняйте привязку портов к `127.0.0.1`;
-  другие контейнеры в общей Docker-сети также могут иметь к нему доступ.
-- Регистрация хранится в томе `warp_zapret1_state` в `/var/lib/cloudflare-warp`.
-  **Не выполняйте `docker compose down -v`**: это удалит том регистрации.
-  При смене имени Compose-проекта убедитесь, что подключается прежний том.
-- Перед обновлением сохраните прежний образ, конфиги и резервную копию
-  тома при остановленном WARP. Не публикуйте state, `.env` и сырые логи.
-- В Compose установлен лимит RAM **256 МиБ**, без дополнительного swap.
-  При нехватке памяти возможен OOM kill.
-- Обход через IPv6 и SOCKS5 UDP relay не реализованы.
-- Конфиги и списки включены в образ; после их правки нужна пересборка.
-  Пользовательский `CONFIG` исполняется как Bash-код: используйте только
-  доверенные файлы.
-
-Подробнее о безопасности — [SECURITY.md](SECURITY.md).
-
-## Для разработки
-
-После сборки образа запустите тесты (Python 3.10+ и Docker):
+Можно проверить локально собранный образ без скачивания и только выбранные
+стратегии (предварительно выполните `docker compose build`):
 
 ```bash
-python -m unittest discover -s tests -v
+bash ./test-strategies.sh \
+  --image warp-zapret1-container-warp-zapret1:latest \
+  --pull never --strategies general,alt2 --rounds 3
 ```
 
-Тесты не регистрируют WARP и не доказывают работоспособность обхода
-у конкретного провайдера.
+```powershell
+.\test-strategies.ps1 `
+  -Image warp-zapret1-container-warp-zapret1:latest `
+  -Pull never -Strategies general,alt2 -Rounds 3
+```
 
-## Лицензия
+Для каждой стратегии скрипт ждёт запуска до 150 секунд, затем делает
+3 раунда HTTPS-проверок с хоста через **оба опубликованных прокси**:
+подтверждает `warp=on` и проверяет HEAD-запросами Discord, YouTube, Google
+и Gstatic. Успех сайта — HTTP 2xx/3xx без ошибки TLS; при сбое WARP
+проверки сайтов в этом раунде пропускаются. Это проверка связки zapret + WARP,
+не прямого обхода DPI, воспроизведения видео или голосовой связи Discord.
 
-Собственный код — [MIT](LICENSE). Сторонние компоненты и условия
-их распространения — [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-MIT не распространяется автоматически на клиент WARP и Linux-пакеты.
+Все проверки успешны — `PASS`; часть не прошла — `PARTIAL`;
+контейнер не запустился вовремя — `STARTUP_FAIL`. Скрипт перечисляет все
+полностью прошедшие стратегии, но **не меняет `.env` и не выбирает их за вас**.
+Один прогон не гарантирует длительную стабильность. Перебор может занять
+десятки минут; ошибка одной стратегии не останавливает остальные.
+
+Рабочий контейнер и его том не затрагиваются: используются случайные порты
+на `127.0.0.1` и отдельный временный том WARP, общий для стратегий одного
+прогона. При запуске принимаются условия Cloudflare и создаётся новая
+тестовая регистрация WARP. После теста контейнеры и временный том удаляются.
+При `Ctrl+C` выполняется очистка и остаются частичные отчёты. Принудительное
+завершение процесса/закрытие терминала может оставить тестовые ресурсы;
+их имена начинаются с `warp-zapret-test-`. Не удаляйте рабочий том.
+
+Отчёты: `test-results/<имя-прогона>/summary.tsv`, `checks.tsv` и `run.txt`
+(версия образа и параметры). В них нет тела Cloudflare trace, внешнего IP,
+данных регистрации или сырых логов WARP. Каталог исключён из Git.
+
+Дополнительные параметры: `--pull always`, `--startup-timeout`,
+`--request-timeout`, `--targets-file`, `--output`; в PowerShell:
+`-Pull always`, `-StartupTimeout`, `-RequestTimeout`, `-TargetsFile`,
+`-OutputDirectory`. Файл целей — по одному публичному HTTPS URL в строке,
+без авторизации и query-параметров; пустые строки и строки с `#` пропускаются.
+Цели попадут в отчёт — не указывайте приватные адреса. Справка:
+`bash ./test-strategies.sh --help` / `.\test-strategies.ps1 -Help`.
+Коды выхода: `0` — есть полный `PASS`, `1` — ни одного, `2` — ошибка скрипта.
+
+**Важно:** прокси без пароля — не открывайте порты наружу.
+Не используйте `docker compose down -v`: это удалит регистрацию WARP.
+
+[Безопасность](SECURITY.md) · [MIT](LICENSE) · [Сторонние компоненты](THIRD_PARTY_NOTICES.md)
