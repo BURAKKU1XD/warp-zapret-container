@@ -101,13 +101,10 @@ def import_release(source, destination=ROOT):
     manifest = {"project": "zapret-discord-youtube", "version": VERSION,
                 "game_filter": False, "strategies": {}, "payloads": {}}
     for name, (filename, data, arguments) in sorted(strategies.items()):
-        header = f"# Imported from zapret-discord-youtube {VERSION}: {filename}\n"
-        header += "# Game Filter disabled; Windows capture replaced by container NFQUEUE.\n"
         if name == "general":
-            # Keep the existing CONFIG path and verified default byte-for-byte.
-            config = header + "source /config/zapret1-warp.conf\n"
+            config = "source /config/zapret1-warp.conf\n"
         else:
-            config = header + QUEUE_DEFAULTS + "\nNFQWS_ARGS=(\n"
+            config = QUEUE_DEFAULTS + "\nNFQWS_ARGS=(\n"
             config += "".join("  " + shlex.quote(arg) + "\n" for arg in arguments)
             config += ")\n"
         (configs / (name + ".conf")).write_text(config, encoding="utf-8", newline="\n")

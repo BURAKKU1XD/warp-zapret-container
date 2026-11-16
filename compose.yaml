@@ -63,5 +63,5 @@ services:
         max-file: "3"
 
 volumes:
-  # Keep the existing volume key to preserve WARP registration on upgrades.
+  # Persistent WARP registration and client settings.
   warp_zapret1_state:
