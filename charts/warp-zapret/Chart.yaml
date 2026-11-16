@@ -1,0 +1,9 @@
+apiVersion: v2
+name: warp-zapret
+description: Shared HTTP/SOCKS5 proxy through Cloudflare WARP and zapret
+type: application
+version: 0.1.0
+kubeVersion: ">=1.26.0-0"
+home: https://github.com/BURAKKU1XD/warp-zapret-container
+sources:
+  - https://github.com/BURAKKU1XD/warp-zapret-container

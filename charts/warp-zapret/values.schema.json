@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "strategy", "persistence", "networkPolicy", "nodeSelector"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {"name": {"type": "string", "minLength": 1}}
+      }
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^$|^[a-z]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "strategy": {
+      "enum": [
+        "general", "alt", "alt2", "alt3", "alt4", "alt5", "alt6", "alt7",
+        "alt8", "alt9", "alt10", "alt11", "alt12", "alt13", "exp",
+        "fake-tls-auto", "fake-tls-auto-alt", "fake-tls-auto-alt2",
+        "fake-tls-auto-alt3", "simple-fake", "simple-fake-alt", "simple-fake-alt2"
+      ]
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "resources": {"type": "object"},
+    "persistence": {
+      "type": "object",
+      "required": ["enabled", "existingClaim", "size"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "existingClaim": {"type": "string"},
+        "size": {"type": "string", "minLength": 1},
+        "storageClass": {"type": ["string", "null"]}
+      },
+      "if": {"properties": {"enabled": {"const": false}}},
+      "then": {"properties": {"existingClaim": {"const": ""}}}
+    },
+    "networkPolicy": {
+      "type": "object",
+      "required": ["enabled", "ingressFrom"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressFrom": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "podSelector": {"type": "object"},
+              "namespaceSelector": {"type": "object"},
+              "ipBlock": {
+                "type": "object",
+                "required": ["cidr"],
+                "properties": {
+                  "cidr": {"type": "string", "minLength": 1},
+                  "except": {"type": "array", "items": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "required": ["kubernetes.io/os", "kubernetes.io/arch"],
+      "properties": {
+        "kubernetes.io/os": {"const": "linux"},
+        "kubernetes.io/arch": {"const": "amd64"}
+      },
+      "additionalProperties": {"type": "string"}
+    },
+    "tolerations": {"type": "array", "items": {"type": "object"}}
+  }
+}

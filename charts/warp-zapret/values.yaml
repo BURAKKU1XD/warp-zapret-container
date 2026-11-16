@@ -1,0 +1,43 @@
+image:
+  repository: ghcr.io/burakku1xd/warp-zapret-container
+  # Pin a published version or sha-<full commit SHA> for reproducible upgrades.
+  tag: latest
+  pullPolicy: Always
+
+# Reference existing registry Secrets in the release namespace.
+imagePullSecrets: []
+fullnameOverride: ""
+
+strategy: general
+podAnnotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+persistence:
+  enabled: true
+  # Reuse a PVC instead of creating one. Never share WARP state between replicas.
+  existingClaim: ""
+  size: 1Gi
+  # null: use the default StorageClass; "": disable dynamic provisioning.
+  storageClass: null
+  # Created PVCs are retained on helm uninstall to preserve private WARP state.
+
+networkPolicy:
+  enabled: true
+  # Kubernetes NetworkPolicyPeer objects. A podSelector alone means this namespace.
+  # [] denies all ingress. Egress is not restricted by this chart.
+  ingressFrom:
+    - podSelector:
+        matchLabels:
+          warp-zapret-client: "true"
+
+# The image only supports Linux amd64. Additional node labels may be added.
+nodeSelector:
+  kubernetes.io/os: linux
+  kubernetes.io/arch: amd64
+tolerations: []

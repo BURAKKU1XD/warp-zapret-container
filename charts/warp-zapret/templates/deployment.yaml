@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "warp-zapret.fullname" . }}
+  labels:
+    {{- include "warp-zapret.labels" . | nindent 4 }}
+spec:
+  # One WARP process per registration; avoid overlap during upgrades.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "warp-zapret.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "warp-zapret.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 20
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: warp-zapret
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              add: ["NET_ADMIN", "NET_RAW"]
+          env:
+            - name: ZAPRET_STRATEGY
+              value: {{ .Values.strategy | quote }}
+            - name: MALLOC_TRIM_THRESHOLD_
+              value: "1048576"
+            - name: MALLOC_MMAP_THRESHOLD_
+              value: "1048576"
+            - name: WARP_PROXY_PORT
+              value: "40000"
+            - name: PUBLIC_HTTP_PROXY_PORT
+              value: "8888"
+            - name: PUBLIC_SOCKS_PROXY_PORT
+              value: "1080"
+          ports:
+            - name: http-proxy
+              containerPort: 8888
+              protocol: TCP
+            - name: socks-proxy
+              containerPort: 1080
+              protocol: TCP
+          startupProbe:
+            exec:
+              command: ["/healthcheck.sh"]
+            periodSeconds: 10
+            timeoutSeconds: 12
+            failureThreshold: 30
+          readinessProbe:
+            exec:
+              command: ["/healthcheck.sh"]
+            periodSeconds: 30
+            timeoutSeconds: 12
+            failureThreshold: 2
+          # Restart on a dead local listener, not a temporary internet outage.
+          livenessProbe:
+            tcpSocket:
+              port: http-proxy
+            periodSeconds: 30
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tun
+              mountPath: /dev/net/tun
+            - name: state
+              mountPath: /var/lib/cloudflare-warp
+            - name: tmp
+              mountPath: /tmp
+            - name: run
+              mountPath: /run
+      volumes:
+        - name: tun
+          hostPath:
+            path: /dev/net/tun
+            type: CharDevice
+        - name: state
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "warp-zapret.fullname" .) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi
+        - name: run
+          emptyDir:
+            medium: Memory
+            sizeLimit: 32Mi

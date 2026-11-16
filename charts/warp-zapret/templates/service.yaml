@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "warp-zapret.fullname" . }}
+  labels:
+    {{- include "warp-zapret.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "warp-zapret.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http-proxy
+      port: 8888
+      targetPort: http-proxy
+      protocol: TCP
+    - name: socks-proxy
+      port: 1080
+      targetPort: socks-proxy
+      protocol: TCP

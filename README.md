@@ -76,6 +76,99 @@ docker compose up -d --no-build --force-recreate
 
 `alt5` не рекомендован автором исходника, `exp` — экспериментальный.
 
+## Kubernetes / Helm
+
+Chart [charts/warp-zapret](charts/warp-zapret) запускает **отдельный общий прокси**:
+приложения подключаются к Service, а не получают sidecar. Только запросы,
+явно отправленные приложением в прокси, идут через WARP.
+
+Нужны Helm 3/4, Kubernetes 1.26+, Linux amd64-нода с `/dev/net/tun`,
+iptables/NFQUEUE/connbytes, доступ к Cloudflare и StorageClass для PVC.
+Политика кластера должна разрешать root, `NET_ADMIN`, `NET_RAW` и hostPath
+для TUN: Pod Security Baseline/Restricted этот Pod не допускают.
+Chart **не включает privileged и hostNetwork**. Runtime должен разрешать
+доступ к устройству TUN; если он запрещён, одного hostPath недостаточно —
+потребуется настройка выдачи устройства администратором кластера.
+
+Из корня клонированного репозитория:
+
+```bash
+helm upgrade --install warp-zapret ./charts/warp-zapret \
+  --namespace proxy --create-namespace --wait --timeout 6m
+kubectl -n proxy exec deployment/warp-zapret -- /healthcheck.sh
+```
+
+По умолчанию скачивается `ghcr.io/burakku1xd/warp-zapret-container:latest`;
+образ должен быть опубликован и доступен нодам. Для приватного GHCR
+укажите существующий Secret через `imagePullSecrets` в values.
+Для воспроизводимых обновлений задайте `image.tag` опубликованной версией
+или `sha-<полный SHA коммита>`; стратегию — через `strategy`.
+Все параметры: [values.yaml](charts/warp-zapret/values.yaml).
+Пользовательский файл values передавайте при каждом обновлении через `-f`.
+
+В **шаблоне Pod приложения** задайте метку и переменные окружения
+(структура настроек в Helm chart конкретного приложения может отличаться):
+
+```yaml
+spec:
+  template:
+    metadata:
+      labels:
+        warp-zapret-client: "true"
+    spec:
+      containers:
+        - name: app
+          # image и остальные настройки вашего приложения
+          env:
+            - name: HTTP_PROXY
+              value: http://warp-zapret.proxy.svc:8888
+            - name: HTTPS_PROXY
+              value: http://warp-zapret.proxy.svc:8888
+            - name: NO_PROXY
+              value: localhost,127.0.0.1,::1,.svc,.cluster.local
+```
+
+Приложение должно поддерживать эти переменные (некоторым нужны
+`http_proxy`/`https_proxy`/`no_proxy` в нижнем регистре или настройка прокси
+в самом приложении). Для SOCKS5 адрес — `socks5h://warp-zapret.proxy.svc:1080`.
+Дополните `NO_PROXY` короткими именами внутренних сервисов и адресами своей
+сети; поддержку CIDR и суффиксов определяет клиент.
+
+По умолчанию NetworkPolicy разрешает прокси только помеченным Pod'ам
+**в namespace `proxy`** и только на TCP 8888/1080. Для приложений, например,
+в namespace `apps`, добавьте в свой values-файл правило, сохранив
+`podSelector` и `namespaceSelector` **в одном элементе списка**:
+
+```yaml
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: apps
+      podSelector:
+        matchLabels:
+          warp-zapret-client: "true"
+```
+
+Список заменяет стандартное правило. Ограничение работает только при
+поддержке NetworkPolicy вашим CNI; другие политики могут дополнительно
+разрешать доступ. Исходящий трафик chart не ограничивает; существующие
+egress-политики должны пропускать DNS и соединения WARP.
+Прокси без авторизации — не публикуйте его через Ingress/NodePort/LoadBalancer.
+
+Chart использует одну реплику и `Recreate`: обновление временно прерывает
+доступ. Регистрация хранится в PVC (по умолчанию 1 GiB), который **остаётся
+после `helm uninstall`**. Не удаляйте PVC и не подключайте его одновременно
+к нескольким WARP-процессам. Можно задать `persistence.existingClaim`;
+при `persistence.enabled=false` регистрация теряется при замене Pod.
+Startup/readiness проверяют HTTPS через оба прокси и `warp=on`;
+при сбое readiness Service перестаёт направлять новые подключения в Pod.
+
+CPU, память, рестарты и готовность доступны через существующий мониторинг
+кластера. Собственного `/metrics`, exporter и ServiceMonitor пока нет.
+Логи: `kubectl -n proxy logs deployment/warp-zapret` — вывод WARP может
+содержать приватные данные, не публикуйте его без очистки.
+
 ## Автоматическая проверка стратегий
 
 В корне есть два независимых скрипта: [Linux/Bash](test-strategies.sh)

@@ -1,0 +1,22 @@
+Internal proxies (for applications that explicitly support a proxy):
+  HTTP/HTTPS CONNECT: http://{{ include "warp-zapret.fullname" . }}.{{ .Release.Namespace }}.svc:8888
+  SOCKS5:             socks5h://{{ include "warp-zapret.fullname" . }}.{{ .Release.Namespace }}.svc:1080
+
+Check readiness:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "warp-zapret.fullname" . }} --timeout=6m
+  kubectl -n {{ .Release.Namespace }} exec deployment/{{ include "warp-zapret.fullname" . }} -- /healthcheck.sh
+
+{{ if .Values.networkPolicy.enabled -}}
+NetworkPolicy restricts ingress using networkPolicy.ingressFrom.
+By default only pods labeled warp-zapret-client=true in {{ .Release.Namespace }} may connect.
+The CNI must enforce NetworkPolicy; other policies can add permissions.
+{{ else -}}
+WARNING: NetworkPolicy is disabled. Any network-reachable client may use this unauthenticated proxy.
+{{ end }}
+{{ if .Values.persistence.enabled -}}
+WARP state is private. The chart-created PVC is retained on uninstall.
+{{ else -}}
+WARNING: WARP state is ephemeral; replacing the pod creates a new registration.
+{{ end }}
+Requires Linux amd64, TUN access and iptables/NFQUEUE/connbytes support on the node.
+No host networking, public ports or Prometheus exporter are configured.
