@@ -92,7 +92,7 @@ class HealthcheckTests(unittest.TestCase):
         service = json.loads(subprocess.run(
             ["docker", "compose", "config", "--format", "json"],
             cwd=ROOT, capture_output=True, check=True, timeout=20,
-        ).stdout)["services"]["warp-zapret1"]
+        ).stdout)["services"]["warp-zapret"]
         self.assertEqual(service["healthcheck"], {
             "test": ["CMD", "/healthcheck.sh"], "interval": "30s",
             "timeout": "12s", "start_period": "2m0s", "retries": 3,

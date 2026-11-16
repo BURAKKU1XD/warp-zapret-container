@@ -220,7 +220,7 @@ RUN set -eux; \
 
 FROM scratch
 
-LABEL warp_zapret1_slim="scratch-rootfs-no-ubuntu-base"
+LABEL warp_zapret_slim="scratch-rootfs-no-ubuntu-base"
 
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 

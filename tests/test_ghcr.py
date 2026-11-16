@@ -178,7 +178,7 @@ class GhcrTests(unittest.TestCase):
         service = json.loads(subprocess.run(
             ["docker", "compose", "config", "--format", "json"],
             cwd=ROOT, env=env, capture_output=True, check=True, timeout=20,
-        ).stdout)["services"]["warp-zapret1"]
+        ).stdout)["services"]["warp-zapret"]
         self.assertEqual(service["image"], IMAGE + ":1.2.3")
         self.assertEqual(int(service["mem_limit"]), 268435456)
         self.assertEqual(service["mem_limit"], service["memswap_limit"])

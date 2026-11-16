@@ -8,13 +8,35 @@
 
 ## Запуск
 
-```bash
-git clone https://github.com/BURAKKU1XD/warp-zapret-container.git
-cd warp-zapret-container
-cp .env.example .env
-docker compose up -d --build
-docker compose logs -f warp-zapret1
+Для запуска достаточно двух файлов в одной папке: [compose.yaml](compose.yaml)
+и [.env.example](.env.example), сохранённого под именем `.env`.
+Стратегии, списки и fake-пакеты уже находятся в образе; папку `config`
+монтировать не требуется. В `.env` задаются образ и выбранная стратегия:
+
+```dotenv
+WARP_ZAPRET_IMAGE=ghcr.io/burakku1xd/warp-zapret-container:latest
+ZAPRET_STRATEGY=general
 ```
+
+Выполните в этой папке:
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose logs -f warp-zapret
+```
+
+Образ должен быть опубликован в GHCR и доступен для скачивания. Для обновления
+повторите `docker compose pull` и `docker compose up -d`. Для фиксации версии
+замените `latest` в `.env` на опубликованный тег версии или `sha-<полный SHA коммита>`.
+
+При переходе с `docker-compose.yml` используйте прежнюю папку проекта и замените
+старый файл на `compose.yaml`. Если старый контейнер называется `warp-zapret1`,
+сначала остановите его командой `docker stop warp-zapret1`. Compose может сообщить
+об оставшемся старом сервисе. Имя тома `warp_zapret1_state` сохранено для
+совместимости: в прежнем Compose-проекте новый контейнер использует прежнюю
+регистрацию WARP. Если ранее задавали имя проекта через `-p` или
+`COMPOSE_PROJECT_NAME`, сохраните и его.
 
 Дождитесь `[+] ready`. `Ctrl+C` закроет логи, но не остановит контейнер.
 
@@ -28,7 +50,7 @@ docker compose logs -f warp-zapret1
 Проверка обоих прокси:
 
 ```bash
-docker exec warp-zapret1 /healthcheck.sh
+docker exec warp-zapret /healthcheck.sh
 ```
 
 Успешный результат: `healthy: HTTP and SOCKS HTTPS verified, warp=on`.
@@ -215,18 +237,23 @@ bash ./test-strategies.sh
 содержимое и разблокируйте только этот файл: `Unblock-File .\test-strategies.ps1`.
 Доступность GHCR-пакета зависит от его публикации и прав доступа.
 
+Для разработки клонируйте репозиторий и соберите локальный образ командой
+`docker build -t warp-zapret:latest .`. Чтобы запустить его через Compose,
+задайте `WARP_ZAPRET_IMAGE=warp-zapret:latest` в `.env` и выполните
+`docker compose up -d --pull never`.
+
 Можно проверить локально собранный образ без скачивания и только выбранные
-стратегии (предварительно выполните `docker compose build`):
+стратегии:
 
 ```bash
 bash ./test-strategies.sh \
-  --image warp-zapret1-container-warp-zapret1:latest \
+  --image warp-zapret:latest \
   --pull never --strategies general,alt2 --rounds 3
 ```
 
 ```powershell
 .\test-strategies.ps1 `
-  -Image warp-zapret1-container-warp-zapret1:latest `
+  -Image warp-zapret:latest `
   -Pull never -Strategies general,alt2 -Rounds 3
 ```
 

@@ -89,7 +89,7 @@ class PublicationTests(unittest.TestCase):
 
     def test_linux_line_endings_and_original_batch_bytes_are_preserved(self):
         paths = ["entrypoint.sh", "healthcheck.sh", "Dockerfile",
-                 "docker-compose.yml", ".github/workflows/ci.yml"]
+                 "compose.yaml", ".github/workflows/ci.yml"]
         for name in paths:
             with self.subTest(file=name):
                 self.assertNotIn(b"\r", (ROOT / name).read_bytes())

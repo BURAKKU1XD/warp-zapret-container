@@ -1,11 +1,7 @@
 services:
-  warp-zapret1:
-    build:
-      context: .
-      dockerfile: Dockerfile
-
-    image: "${WARP_ZAPRET_IMAGE:-warp-zapret1-container-warp-zapret1:latest}"
-    container_name: warp-zapret1
+  warp-zapret:
+    image: "${WARP_ZAPRET_IMAGE:-ghcr.io/burakku1xd/warp-zapret-container:latest}"
+    container_name: warp-zapret
 
     restart: unless-stopped
     init: true
@@ -66,4 +62,5 @@ services:
         max-file: "3"
 
 volumes:
+  # Keep the existing volume key to preserve WARP registration on upgrades.
   warp_zapret1_state:

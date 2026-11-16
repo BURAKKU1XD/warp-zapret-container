@@ -8,7 +8,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IMAGE = "warp-zapret1-container-warp-zapret1:latest"
+IMAGE = "warp-zapret:latest"
 PAYLOAD_HASHES = {
     "quic_initial_www_google_com.bin": "f4589c57749f956bb30538197a521d7005f8b0a8723b4707e72405e51ddac50a",
     "tls_clienthello_www_google_com.bin": "936c2bee4cfb80aa3c426b2dcbcc834b3fbcd1adb17172959dc569c73a14275c",
@@ -32,7 +32,7 @@ def run_in_image(script, net_admin=False):
     )
     if result.returncode:
         raise AssertionError(
-            f"Image check failed ({result.returncode}); build with docker compose build first.\n"
+            f"Image check failed ({result.returncode}); build with docker build -t {IMAGE} . first.\n"
             + result.stdout.decode(errors="replace")
             + result.stderr.decode(errors="replace")
         )

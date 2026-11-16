@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  LOCAL_IMAGE: warp-zapret1-container-warp-zapret1:latest
+  LOCAL_IMAGE: warp-zapret:latest
 
 jobs:
   test:

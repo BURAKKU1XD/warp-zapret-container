@@ -166,7 +166,7 @@ class StrategyTests(unittest.TestCase):
                 ["docker", "compose", "config", "--format", "json"], cwd=ROOT,
                 env=env, capture_output=True, check=True, timeout=30,
             )
-            service = json.loads(result.stdout)["services"]["warp-zapret1"]
+            service = json.loads(result.stdout)["services"]["warp-zapret"]
             self.assertEqual(service["environment"]["ZAPRET_STRATEGY"], name)
             self.assertNotIn("CONFIG", service["environment"])
             self.assertEqual(int(service["mem_limit"]), 268435456)
