@@ -43,6 +43,27 @@ class ChartTests(unittest.TestCase):
         result = helm("lint", CHART, "--strict")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_default_dns_uses_cluster(self):
+        self.assertEqual(self.pod["dnsPolicy"], "ClusterFirst")
+        self.assertNotIn("dnsConfig", self.pod)
+
+    def test_custom_dns_applies_only_to_proxy_pod(self):
+        resources = render({"dnsPolicy": "None", "dnsConfig": {
+            "nameservers": ["1.1.1.1", "8.8.8.8"],
+            "options": [{"name": "ndots", "value": "1"}],
+        }})
+        pod = resources["Deployment"]["spec"]["template"]["spec"]
+        self.assertEqual(pod["dnsPolicy"], "None")
+        self.assertEqual(pod["dnsConfig"]["nameservers"], ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual(pod["dnsConfig"]["options"], [{"name": "ndots", "value": "1"}])
+        for kind in ("Service", "NetworkPolicy", "PersistentVolumeClaim"):
+            self.assertEqual(resources[kind], self.default[kind])
+
+    def test_dns_none_requires_nameservers(self):
+        result = helm("template", "warp-zapret", CHART, "--set", "dnsPolicy=None")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("nameservers", result.stderr)
+
     def test_packaged_chart_renders_the_same_resources(self):
         with tempfile.TemporaryDirectory(prefix="warp-helm-package-") as directory:
             result = helm("package", CHART, "--destination", directory)

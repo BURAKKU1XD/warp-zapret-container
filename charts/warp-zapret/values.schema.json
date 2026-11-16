@@ -86,6 +86,33 @@
       },
       "additionalProperties": {"type": "string"}
     },
-    "tolerations": {"type": "array", "items": {"type": "object"}}
-  }
+    "tolerations": {"type": "array", "items": {"type": "object"}},
+    "dnsPolicy": {"enum": ["ClusterFirst", "Default", "None"]},
+    "dnsConfig": {
+      "type": "object",
+      "properties": {
+        "nameservers": {
+          "type": "array", "minItems": 1, "maxItems": 3,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "searches": {"type": "array", "items": {"type": "string"}},
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["name"],
+            "properties": {"name": {"type": "string"}, "value": {"type": "string"}}
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"required": ["dnsPolicy"], "properties": {"dnsPolicy": {"const": "None"}}},
+      "then": {
+        "required": ["dnsConfig"],
+        "properties": {"dnsConfig": {"required": ["nameservers"]}}
+      }
+    }
+  ]
 }

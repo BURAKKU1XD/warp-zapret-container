@@ -164,6 +164,27 @@ kubectl -n proxy exec deployment/warp-zapret -- /healthcheck.sh
 Все параметры: [values.yaml](charts/warp-zapret/values.yaml).
 Пользовательский файл values передавайте при каждом обновлении через `-f`.
 
+По умолчанию прокси использует DNS кластера (`dnsPolicy: ClusterFirst`). Если
+кластерный upstream возвращает `NXDOMAIN` для нужных публичных доменов,
+можно задать DNS только для Pod прокси:
+
+```yaml
+dnsPolicy: None
+dnsConfig:
+  nameservers:
+    - 1.1.1.1
+    - 8.8.8.8
+  options:
+    - name: ndots
+      value: "1"
+```
+
+Сначала проверьте доступность выбранных DNS из сети Pod. Этот override не меняет
+CoreDNS, DNS ноды и DNS клиентских приложений. Pod прокси с такой настройкой
+не использует кластерный resolver для имён `*.svc`; приложения продолжают
+находить Service прокси через собственный Kubernetes DNS. Изменение DNS
+пересоздаёт Pod согласно стратегии Recreate и прерывает активные соединения.
+
 В **шаблоне Pod приложения** задайте метку и переменные окружения
 (структура настроек в Helm chart конкретного приложения может отличаться):
 
