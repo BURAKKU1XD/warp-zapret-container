@@ -68,6 +68,16 @@ class DnsTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Cannot configure DNS", result.stderr)
 
+    def test_inherit_preserves_runtime_dns_including_options_and_searches(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            original = "nameserver 10.0.0.10\nsearch svc.cluster.local\noptions ndots:5\n"
+            (directory / "resolv.conf").write_text(original)
+            result = self.configure(directory, "inherit")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((directory / "resolv.conf").read_text(), original)
+            self.assertFalse((directory / "original").exists())
+
     def test_entrypoint_configures_dns_before_starting_services(self):
         entrypoint = (ROOT / "entrypoint.sh").read_text(encoding="utf-8")
         self.assertLess(entrypoint.index("configure_dns\n"), entrypoint.index("# Runtime starts here."))

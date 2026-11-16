@@ -48,13 +48,38 @@ class ChartTests(unittest.TestCase):
                         ["10.0.0.53", "1.0.0.1", "8.8.4.4"]):
             with self.subTest(servers=servers):
                 actual = self.default if servers == ["1.1.1.1", "8.8.8.8"] else render({
-                    "dnsServers": servers,
+                    "dnsConfig": {"nameservers": servers},
                 })
                 pod = actual["Deployment"]["spec"]["template"]["spec"]
                 self.assertEqual(pod["dnsPolicy"], "None")
                 self.assertEqual(pod["dnsConfig"], {"nameservers": servers})
                 env = {v["name"]: v["value"] for v in pod["containers"][0]["env"]}
-                self.assertEqual(env["DNS_SERVERS"], " ".join(servers))
+                self.assertEqual(env["DNS_SERVERS"], "inherit")
+
+    def test_custom_dns_applies_only_to_proxy_pod(self):
+        resources = render({"dnsPolicy": "None", "dnsConfig": {
+            "nameservers": ["1.1.1.1", "8.8.8.8"],
+            "options": [{"name": "ndots", "value": "1"}],
+        }})
+        pod = resources["Deployment"]["spec"]["template"]["spec"]
+        self.assertEqual(pod["dnsPolicy"], "None")
+        self.assertEqual(pod["dnsConfig"]["nameservers"], ["1.1.1.1", "8.8.8.8"])
+        self.assertEqual(pod["dnsConfig"]["options"], [{"name": "ndots", "value": "1"}])
+        for kind in ("Service", "NetworkPolicy", "PersistentVolumeClaim"):
+            self.assertEqual(resources[kind], self.default[kind])
+
+    def test_cluster_dns_override_is_preserved_by_entrypoint(self):
+        resources = render({"dnsPolicy": "ClusterFirst", "dnsConfig": None})
+        pod = resources["Deployment"]["spec"]["template"]["spec"]
+        self.assertEqual(pod["dnsPolicy"], "ClusterFirst")
+        self.assertNotIn("dnsConfig", pod)
+        env = {v["name"]: v["value"] for v in pod["containers"][0]["env"]}
+        self.assertEqual(env["DNS_SERVERS"], "inherit")
+
+    def test_dns_none_requires_nameservers(self):
+        result = helm("template", "warp-zapret", CHART, "--set", "dnsConfig.nameservers=null")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("nameservers", result.stderr)
 
     def test_packaged_chart_renders_the_same_resources(self):
         with tempfile.TemporaryDirectory(prefix="warp-helm-package-") as directory:
@@ -211,11 +236,8 @@ class ChartTests(unittest.TestCase):
 
     def test_schema_rejects_invalid_runtime_inputs(self):
         cases = [
-            {"dnsServers": []},
-            {"dnsServers": ["1.1.1.1"] * 4},
-            {"dnsServers": ["256.1.1.1"]},
-            {"dnsServers": ["dns.example.test"]},
-            {"dnsServers": ["01.1.1.1"]},
+            {"dnsConfig": {"nameservers": []}},
+            {"dnsConfig": {"nameservers": ["1.1.1.1"] * 4}},
             {"strategy": "../custom"},
             {"strategy": "missing"},
             {"nodeSelector": {"kubernetes.io/arch": "arm64"}},

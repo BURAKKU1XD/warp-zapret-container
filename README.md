@@ -154,13 +154,17 @@ Entrypoint записывает `/etc/resolv.conf` до запуска серв�
 В Helm задайте список в своём values-файле:
 
 ```yaml
-dnsServers:
-  - "1.1.1.1"
-  - "8.8.8.8"
+dnsPolicy: None
+dnsConfig:
+  nameservers:
+    - "1.1.1.1"
+    - "8.8.8.8"
 ```
 
-Chart передаёт его в `DNS_SERVERS` и задаёт Pod `dnsPolicy: None` с
-`dnsConfig.nameservers`, чтобы не добавлять DNS кластера.
+Chart задаёт Pod `dnsPolicy: None` с `dnsConfig.nameservers`.
+В контейнер передаётся `DNS_SERVERS=inherit`: entrypoint сохраняет DNS,
+поисковые домены и опции, которые настроил Kubernetes. Это значение также
+можно использовать при `docker run`, чтобы сохранить DNS Docker.
 Эта настройка заменяет DNS Docker/кластера для самого прокси: внутренние
 имена Docker и Kubernetes (`*.svc.cluster.local`) через публичные DNS
 не разрешаются. Клиентские Pod сохраняют собственные настройки DNS.
@@ -198,6 +202,26 @@ kubectl -n proxy exec deployment/warp-zapret -- /healthcheck.sh
 или `sha-<полный SHA коммита>`; стратегию — через `strategy`.
 Все параметры: [values.yaml](charts/warp-zapret/values.yaml).
 Пользовательский файл values передавайте при каждом обновлении через `-f`.
+
+По умолчанию Pod прокси использует публичные DNS `1.1.1.1` и `8.8.8.8`
+с `dnsPolicy: None`. Настройки DNS применяются только к Pod прокси:
+
+```yaml
+dnsPolicy: None
+dnsConfig:
+  nameservers:
+    - 1.1.1.1
+    - 8.8.8.8
+  options:
+    - name: ndots
+      value: "1"
+```
+
+Сначала проверьте доступность выбранных DNS из сети Pod. Этот override не меняет
+CoreDNS, DNS ноды и DNS клиентских приложений. Pod прокси с такой настройкой
+не использует кластерный resolver для имён `*.svc`; приложения продолжают
+находить Service прокси через собственный Kubernetes DNS. Изменение DNS
+пересоздаёт Pod согласно стратегии Recreate и прерывает активные соединения.
 
 В **шаблоне Pod приложения** задайте метку и переменные окружения
 (структура настроек в Helm chart конкретного приложения может отличаться):

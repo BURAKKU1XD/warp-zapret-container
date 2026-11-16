@@ -9,10 +9,6 @@ imagePullSecrets: []
 fullnameOverride: ""
 
 strategy: general
-# Used for both Pod DNS and the container's DNS_SERVERS environment variable.
-dnsServers:
-  - "1.1.1.1"
-  - "8.8.8.8"
 podAnnotations: {}
 
 resources:
@@ -45,3 +41,11 @@ nodeSelector:
   kubernetes.io/os: linux
   kubernetes.io/arch: amd64
 tolerations: []
+
+# Public DNS defaults apply only to this proxy Pod.
+# dnsPolicy: None requires explicit nameservers in dnsConfig.
+dnsPolicy: None
+dnsConfig:
+  nameservers:
+    - "1.1.1.1"
+    - "8.8.8.8"

@@ -5,6 +5,10 @@ configure_dns() {
   local resolv_conf="${1:-/etc/resolv.conf}"
   local backup="${2:-/run/warp-zapret.resolv.conf.original}"
   local servers="${DNS_SERVERS:-1.1.1.1 8.8.8.8}" server octet
+  if [ "$servers" = inherit ]; then
+    echo "[+] DNS inherited from container runtime"
+    return 0
+  fi
   local -a nameservers octets
   servers="${servers//$'\n'/ }"
   IFS=$' \t\r' read -r -a nameservers <<< "$servers"

@@ -1,17 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": ["image", "strategy", "dnsServers", "persistence", "networkPolicy", "nodeSelector"],
+  "required": ["image", "strategy", "persistence", "networkPolicy", "nodeSelector"],
   "properties": {
-    "dnsServers": {
-      "type": "array",
-      "minItems": 1,
-      "maxItems": 3,
-      "items": {
-        "type": "string",
-        "pattern": "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
-      }
-    },
     "image": {
       "type": "object",
       "required": ["repository", "tag", "pullPolicy"],
@@ -95,6 +86,33 @@
       },
       "additionalProperties": {"type": "string"}
     },
-    "tolerations": {"type": "array", "items": {"type": "object"}}
-  }
+    "tolerations": {"type": "array", "items": {"type": "object"}},
+    "dnsPolicy": {"enum": ["ClusterFirst", "Default", "None"]},
+    "dnsConfig": {
+      "type": "object",
+      "properties": {
+        "nameservers": {
+          "type": "array", "minItems": 1, "maxItems": 3,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "searches": {"type": "array", "items": {"type": "string"}},
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["name"],
+            "properties": {"name": {"type": "string"}, "value": {"type": "string"}}
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"required": ["dnsPolicy"], "properties": {"dnsPolicy": {"const": "None"}}},
+      "then": {
+        "required": ["dnsConfig"],
+        "properties": {"dnsConfig": {"required": ["nameservers"]}}
+      }
+    }
+  ]
 }
