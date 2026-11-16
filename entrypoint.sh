@@ -1,7 +1,66 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-CONFIG="${CONFIG:-/config/zapret1-warp.conf}"
+STRATEGY="${ZAPRET_STRATEGY:-general}"
+STRATEGY_EXPLICIT=0
+DRY_RUN=0
+
+list_strategies() {
+  local file
+  for file in /config/strategies/*.conf; do
+    [ -f "$file" ] || continue
+    file="${file##*/}"
+    printf '%s\n' "${file%.conf}"
+  done | sort
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --strategy)
+      if [ "$#" -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
+        echo "[!] --strategy requires a name (see --list-strategies)" >&2
+        exit 2
+      fi
+      STRATEGY="$2"
+      STRATEGY_EXPLICIT=1
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --list-strategies)
+      list_strategies
+      exit 0
+      ;;
+    --help|-h)
+      echo "Usage: /entrypoint.sh [--strategy NAME] [--dry-run]"
+      echo "       /entrypoint.sh --list-strategies"
+      echo "Selection: --strategy > CONFIG > ZAPRET_STRATEGY > general"
+      exit 0
+      ;;
+    *)
+      echo "[!] Unknown argument: $1 (see --help)" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [ "$STRATEGY_EXPLICIT" = 0 ] && [ -n "${CONFIG:-}" ]; then
+  STRATEGY="custom"
+else
+  if ! [[ "$STRATEGY" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] ||
+    [ ! -f "/config/strategies/$STRATEGY.conf" ]; then
+    echo "[!] Unknown strategy: $STRATEGY (see --list-strategies)" >&2
+    exit 2
+  fi
+  CONFIG="/config/strategies/$STRATEGY.conf"
+fi
+
+if [ ! -r "$CONFIG" ]; then
+  echo "[!] Cannot read config: $CONFIG" >&2
+  exit 2
+fi
 
 NFQWS_LOG="/var/log/zapret1-warp-nfqws.log"
 WARP_LOG="/var/log/warp-svc.log"
@@ -12,6 +71,10 @@ PUBLIC_HTTP_PROXY_PORT="${PUBLIC_HTTP_PROXY_PORT:-${PUBLIC_PROXY_PORT:-8888}}"
 PUBLIC_SOCKS_PROXY_PORT="${PUBLIC_SOCKS_PROXY_PORT:-1080}"
 
 source "$CONFIG"
+
+if [ "$DRY_RUN" = 1 ]; then
+  exec /usr/local/bin/nfqws --dry-run --qnum="$NFQUEUE_NUM" "${NFQWS_ARGS[@]}"
+fi
 
 cleanup_rules() {
   while iptables -t mangle -D OUTPUT \
@@ -82,18 +145,14 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
+echo "[+] strategy: $STRATEGY ($CONFIG)"
+echo "[+] checking selected config and assets"
+/usr/local/bin/nfqws --dry-run --qnum="$NFQUEUE_NUM" "${NFQWS_ARGS[@]}"
+
 echo "[+] starting dbus"
 mkdir -p /run/dbus
 rm -f /run/dbus/pid
 dbus-daemon --system --fork || true
-
-echo "[+] checking assets"
-test -s /config/lists/list-general.txt
-test -s /config/lists/ipset-all.txt
-test -s /opt/zapret/files/fake/quic_initial_www_google_com.bin
-test -s /opt/zapret/files/fake/tls_clienthello_www_google_com.bin
-test -s /opt/zapret/files/fake/ACTIVE_DISCORD_UDP.bin
-test -s /opt/zapret/files/fake/tls_clienthello_4pda_to.bin
 
 echo "[+] starting nfqws"
 : > "$NFQWS_LOG"

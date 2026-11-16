@@ -20,3 +20,29 @@ var/lib/cloudflare-warp/
 
 # Python regression tests
 __pycache__/
+*.py[cod]
+
+# Local development/diagnostics (kept on disk, never published).
+/.planning/
+/.venv/
+/.vscode/
+/.idea/
+/dist/
+
+# Environment, credentials and operator overrides.
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+registration.json
+reg.json
+settings.json
+mdm.xml
+docker-compose.override.yml
+docker-compose.override.yaml
+compose.override.yml
+compose.override.yaml

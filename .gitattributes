@@ -1,0 +1,25 @@
+# Shell/config files are sourced inside the Linux image.
+* text=auto
+*.sh text eol=lf
+*.conf text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+LICENSE text eol=lf
+/licenses/*.txt text eol=lf
+.dockerignore text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.env.example text eol=lf
+*.bin binary
+
+# Preserve original release bytes for the recorded SHA-256 checks.
+/tests/fixtures/strategies-1.10.4/*.bat -text -whitespace
+
+# Local diagnostics must not appear in source archives either.
+/.planning export-ignore
+/.env export-ignore
+/.env.* export-ignore
+/.env.example -export-ignore

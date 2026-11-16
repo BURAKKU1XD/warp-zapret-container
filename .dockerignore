@@ -1,20 +1,33 @@
-.git
-.gitignore
-README*.bak
+# Only public build inputs enter the context. Local state, .env, Git history,
+# diagnostics, tests and tooling are deliberately not sent to the builder.
+**
+!Dockerfile
+!entrypoint.sh
+!healthcheck.sh
+!LICENSE
+!THIRD_PARTY_NOTICES.md
+!licenses/
+!licenses/**
+!config/
+!config/**
+!assets/
+!assets/**
 
-scripts
-checkpoints
-image-backups
-
-*.tar
-*.tar.gz
-*.zip
-*.log
-*.sha256
-
-Dockerfile.before-*
-entrypoint.sh.before-*
-entrypoint.inner.sh
-
-__pycache__
-*.pyc
+# Defense in depth if a private file is accidentally placed in an allowed tree.
+**/.env
+**/.env.*
+**/*.env
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/registration.json
+**/reg.json
+**/settings.json
+**/mdm.xml
+**/warp_state
+**/cloudflare-warp
+**/*.log
+**/*.tar
+**/*.tar.gz
+**/*.zip

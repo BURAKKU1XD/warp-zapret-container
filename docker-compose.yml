@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    image: warp-zapret1-container-warp-zapret1:latest
+    image: "${WARP_ZAPRET_IMAGE:-warp-zapret1-container-warp-zapret1:latest}"
     container_name: warp-zapret1
 
     restart: unless-stopped
@@ -27,7 +27,7 @@ services:
       - "127.0.0.1:1080:1080"
 
     environment:
-      CONFIG: /config/zapret1-warp.conf
+      ZAPRET_STRATEGY: "${ZAPRET_STRATEGY:-general}"
 
       # Balanced glibc reuse/release thresholds (1 MiB).
       MALLOC_TRIM_THRESHOLD_: "1048576"
@@ -53,17 +53,11 @@ services:
     stop_grace_period: 20s
 
     healthcheck:
-      test:
-        [
-          "CMD",
-          "/usr/bin/bash",
-          "-lc",
-          "warp-cli --accept-tos status | grep -q 'Status update: Connected' && ss -lnt | grep -q ':8888' && ss -lnt | grep -q ':1080'"
-        ]
+      test: ["CMD", "/healthcheck.sh"]
       interval: 30s
-      timeout: 10s
+      timeout: 12s
       retries: 3
-      start_period: 60s
+      start_period: 120s
 
     logging:
       driver: local

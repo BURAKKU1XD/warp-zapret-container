@@ -120,6 +120,7 @@ RUN set -eux; \
     copy_cmd ipset; \
     copy_cmd ss; \
     copy_cmd socat; \
+    copy_cmd curl; \
     copy_cmd grep; \
     copy_cmd warp-svc; \
     copy_cmd warp-cli; \
@@ -133,6 +134,7 @@ RUN set -eux; \
       /usr/sbin/ipset \
       /usr/bin/ss \
       /usr/bin/socat1 \
+      /usr/bin/curl \
       /usr/bin/grep \
       /usr/bin/warp-svc \
       /usr/bin/warp-cli \
@@ -159,6 +161,11 @@ RUN set -eux; \
     cp -a /usr/share/dbus-1 "$ROOT/usr/share/"; \
     cp -a /usr/lib/dbus-1.0 "$ROOT/usr/lib/"; \
     cp -a /usr/share/ca-certificates "$ROOT/usr/share/"; \
+    for package in /usr/share/doc/*; do \
+      if [ -f "$package/copyright" ]; then \
+        copy_file "$package/copyright"; \
+      fi; \
+    done; \
     cp -a /usr/share/iptables "$ROOT/usr/share/" 2>/dev/null || true; \
     cp -a /usr/lib/x86_64-linux-gnu/xtables "$ROOT/usr/lib/x86_64-linux-gnu/"; \
     cp -a /usr/lib/x86_64-linux-gnu/libnss_*.so* "$ROOT/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true; \
@@ -176,20 +183,25 @@ RUN set -eux; \
       | sort -n \
       | awk '{printf "%.1f MB  %s\n", $1/1024/1024, $2}'
 
+COPY --from=zapret-build /src/zapret/docs/LICENSE.txt /rootfs/usr/share/doc/nfqws/copyright
+COPY LICENSE THIRD_PARTY_NOTICES.md /rootfs/usr/share/doc/warp-zapret-container/
+COPY licenses /rootfs/usr/share/doc/warp-zapret-container/licenses
 COPY assets/fake /rootfs/opt/zapret/files/fake
 COPY assets/lists /rootfs/config/lists
 COPY config/zapret1-warp.conf /rootfs/config/zapret1-warp.conf
+COPY config/strategies /rootfs/config/strategies
 COPY entrypoint.sh /rootfs/entrypoint.sh
+COPY healthcheck.sh /rootfs/healthcheck.sh
 
 RUN set -eux; \
     sed -i '1s|^#!/usr/bin/env bash|#!/usr/bin/bash|' /rootfs/entrypoint.sh; \
     if ! grep -q 'rm -f /run/dbus/pid' /rootfs/entrypoint.sh; then \
       sed -i '/mkdir -p \/run\/dbus/a rm -f /run/dbus/pid' /rootfs/entrypoint.sh; \
     fi; \
-    chmod +x /rootfs/entrypoint.sh; \
+    chmod +x /rootfs/entrypoint.sh /rootfs/healthcheck.sh; \
     chroot /rootfs /usr/bin/bash -lc ' \
       set -e; \
-      for c in bash dbus-daemon dbus-uuidgen iptables ipset ss socat warp-svc warp-cli nfqws grep tail seq sleep mkdir rm; do \
+      for c in bash dbus-daemon dbus-uuidgen iptables ipset ss socat curl warp-svc warp-cli nfqws grep tail seq sleep mkdir rm; do \
         command -v "$c" >/dev/null || { echo "MISSING $c"; exit 1; }; \
       done; \
       warp-cli --version || true; \
@@ -213,5 +225,8 @@ LABEL warp_zapret1_slim="scratch-rootfs-no-ubuntu-base"
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 COPY --from=rootfs-build /rootfs/ /
+
+HEALTHCHECK --interval=30s --timeout=12s --start-period=120s --retries=3 \
+  CMD ["/healthcheck.sh"]
 
 ENTRYPOINT ["/entrypoint.sh"]

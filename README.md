@@ -1,78 +1,161 @@
-# warp-zapret1-container
+# warp-zapret-container
 
-Минимальный Docker-контейнер с Cloudflare WARP + zapret/nfqws, который поднимает локальный HTTP и SOCKS proxy через WARP.
+Локальный HTTP- и SOCKS5-прокси через Cloudflare WARP с zapret/nfqws.
+WARP работает по MASQUE; через него идут только приложения с настроенным
+прокси, а не весь трафик хоста.
 
-## Для чего
-Подходит, когда нужно дать приложениям локальный proxy через Cloudflare WARP:
+**Проект экспериментальный.** Подключение зависит от сети: первая регистрация
+WARP без внешнего VPN и длительная стабильность не гарантируются.
+
+| Прокси | Адрес |
+|---|---|
+| HTTP / HTTPS CONNECT | `http://127.0.0.1:8888` |
+| SOCKS5 | `socks5h://127.0.0.1:1080` |
+
+## Требования
+
+- Linux x86-64/amd64 с Docker Engine и Compose v2 либо Docker Desktop
+  в режиме Linux-контейнеров. ARM64 не поддерживается.
+- Доступный `/dev/net/tun`, поддержка ядром iptables/NFQUEUE и connbytes.
+  Capabilities `NET_ADMIN` и `NET_RAW` уже заданы в Compose.
+- Доступ к GitHub, Ubuntu и Cloudflare APT при сборке, к WARP API
+  и серверам WARP при запуске.
+
+## Как запустить
+
+Команды рассчитаны на Bash. Скачайте проект и создайте `.env`:
+
+```bash
+git clone https://github.com/BURAKKU1XD/warp-zapret-container.git
+cd warp-zapret-container
+cp .env.example .env
+```
+
+В `.env` выберите стратегию. По умолчанию:
+
+```dotenv
+ZAPRET_STRATEGY=general
+```
+
+Соберите и запустите контейнер:
+
+```bash
+docker compose up -d --build
+docker compose logs -f warp-zapret1
+```
+
+Дождитесь `[+] ready`, затем проверьте прокси командами ниже.
+`Ctrl+C` закрывает просмотр логов, контейнер продолжает работать.
+При первом запуске создаётся регистрация WARP, затем используется сохранённая.
+
+## Список стратегий
+
+В образ включены **22 стратегии** из `zapret-discord-youtube` версии `1.10.4`:
 
 ```text
-HTTP:  127.0.0.1:8888
-SOCKS: 127.0.0.1:1080
+general
+alt
+alt2
+alt3
+alt4
+alt5
+alt6
+alt7
+alt8
+alt9
+alt10
+alt11
+alt12
+alt13
+exp
+fake-tls-auto
+fake-tls-auto-alt
+fake-tls-auto-alt2
+fake-tls-auto-alt3
+simple-fake
+simple-fake-alt
+simple-fake-alt2
 ```
 
-## Скачать
+Начните с `general`. `alt5` помечен автором исходника как **NOT RECOMMENDED**,
+`exp` — экспериментальный. Универсально рабочей стратегии нет,
+автоматического перебора тоже нет.
+
+### Как сменить стратегию
+
+Измените существующую строку в `.env`, например:
+
+```dotenv
+ZAPRET_STRATEGY=alt12
+```
+
+Пересоздайте контейнер:
 
 ```bash
-git clone https://github.com/BURAKKU1XD/warp-zapret1-container.git
-cd warp-zapret1-container
+docker compose up -d --no-build --force-recreate
 ```
 
-## Собрать
+Пересборка не нужна: все стратегии уже в образе.
+`docker compose restart` изменения `.env` не применяет.
+Конфиги находятся в [config/strategies](config/strategies).
+
+## Проверка
+
+Проверьте HTTP и SOCKS5 с хоста:
 
 ```bash
-docker compose build --no-cache --progress=plain
+curl --fail --show-error --max-time 15 --noproxy "" -x http://127.0.0.1:8888 https://www.cloudflare.com/cdn-cgi/trace
+curl --fail --show-error --max-time 15 --noproxy "" --socks5-hostname 127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace
 ```
 
-## Запустить
+В обоих ответах должна быть строка `warp=on`. В PowerShell при необходимости
+используйте `curl.exe`. Полный ответ содержит внешний IP — не публикуйте его.
+
+Состояние контейнера и встроенная проверка обоих прокси:
 
 ```bash
-docker compose up -d
-docker logs -f warp-zapret1
+docker compose ps
+docker exec warp-zapret1 /healthcheck.sh
 ```
 
-Успешный запуск:
+`Connected` и `[+] ready` сами по себе не доказывают доступность сайтов.
+Healthcheck проверяет HTTPS через оба прокси каждые 30 секунд.
+**Статус `unhealthy` не вызывает автоматический перезапуск контейнера.**
 
-```text
-Status update: Connected
-Tunnel Protocol: MASQUE
-[+] ready
+## Запуск без сборки: GHCR
+
+Если образ опубликован и доступен вам, задайте в `.env`:
+
+```dotenv
+WARP_ZAPRET_IMAGE=ghcr.io/burakku1xd/warp-zapret-container:latest
+ZAPRET_STRATEGY=general
 ```
 
-## Использовать/проверить HTTP/SOCKS proxy
+Затем вместо локальной сборки:
 
 ```bash
-curl -x http://127.0.0.1:8888 https://www.cloudflare.com/cdn-cgi/trace | grep warp=
-curl --socks5-hostname 127.0.0.1:1080 https://www.cloudflare.com/cdn-cgi/trace | grep warp=
+docker compose pull
+docker compose up -d --no-build
 ```
 
-Должно быть:
-```text
-warp=on
-```
+Это настроенный адрес публикации, а не гарантия доступности пакета.
+Для анонимного скачивания владелец должен сделать пакет Public;
+приватный пакет требует входа в GHCR. Токены в `.env` и Git не сохраняйте.
 
-## Проверить состояние
+## Управление
 
 ```bash
-docker exec warp-zapret1 /usr/bin/bash -lc '
-warp-cli --accept-tos status
-warp-cli --accept-tos tunnel stats || true
-ss -lntup | grep -E "40000|8888|1080" || true
-'
+# Остановить.
+docker compose stop
+
+# Запустить остановленный контейнер.
+docker compose start
+
+# Удалить контейнер и сеть, сохранив регистрацию.
+docker compose down
 ```
 
-## Как поменять порты
-
-`docker-compose.yml`
-
-Сейчас:
-
-```yaml
-ports:
-  - "127.0.0.1:8888:8888"
-  - "127.0.0.1:1080:1080"
-```
-
-Например, поменять HTTP на `8889`, SOCKS на `1081`:
+Чтобы изменить порты, замените левую часть проброса в `docker-compose.yml`:
 
 ```yaml
 ports:
@@ -80,93 +163,40 @@ ports:
   - "127.0.0.1:1081:1080"
 ```
 
-После изменения:
-
-```bash
-docker compose down
-docker compose up -d --no-build
-```
-
-Проверка:
-
-```bash
-curl -x http://127.0.0.1:8889 https://www.cloudflare.com/cdn-cgi/trace | grep warp=
-curl --socks5-hostname 127.0.0.1:1081 https://www.cloudflare.com/cdn-cgi/trace | grep warp=
-```
+Примените через `docker compose up -d --no-build --force-recreate`.
+В этом примере подключайтесь к HTTP на `8889`, SOCKS5 на `1081`.
 
 ## Важно
 
-### Память и аллокатор
+- Прокси **без аутентификации**. Сохраняйте привязку портов к `127.0.0.1`;
+  другие контейнеры в общей Docker-сети также могут иметь к нему доступ.
+- Регистрация хранится в томе `warp_zapret1_state` в `/var/lib/cloudflare-warp`.
+  **Не выполняйте `docker compose down -v`**: это удалит том регистрации.
+  При смене имени Compose-проекта убедитесь, что подключается прежний том.
+- Перед обновлением сохраните прежний образ, конфиги и резервную копию
+  тома при остановленном WARP. Не публикуйте state, `.env` и сырые логи.
+- В Compose установлен лимит RAM **256 МиБ**, без дополнительного swap.
+  При нехватке памяти возможен OOM kill.
+- Обход через IPv6 и SOCKS5 UDP relay не реализованы.
+- Конфиги и списки включены в образ; после их правки нужна пересборка.
+  Пользовательский `CONFIG` исполняется как Bash-код: используйте только
+  доверенные файлы.
 
-В `docker-compose.yml` по умолчанию установлены:
+Подробнее о безопасности — [SECURITY.md](SECURITY.md).
 
-- `MALLOC_TRIM_THRESHOLD_=1048576` и `MALLOC_MMAP_THRESHOLD_=1048576` —
-  пороги glibc по 1 МиБ для компромисса между повторным использованием
-  памяти и её возвратом ОС. Это не гарантия отсутствия утечек.
-- `mem_limit: 256m` — жёсткий лимит RAM 256 МиБ для всего контейнера.
-- `memswap_limit: 256m` — общий лимит RAM+swap равен лимиту RAM,
-  поэтому дополнительный swap контейнеру не предоставляется.
+## Для разработки
 
-При превышении доступной памяти возможен OOM kill. Лимит не заменяет
-диагностику роста памяти. Эти настройки относятся к запуску через Compose;
-для обычного `docker run` нужны соответствующие `--env`, `--memory` и
-`--memory-swap`.
-
-После изменения окружения/лимитов контейнер нужно пересоздать, а не просто
-выполнить `docker restart`. Не удаляйте state volume при пересоздании.
-
-WARP state лежит в Docker volume:
-
-```text
-warp_zapret1_state:/var/lib/cloudflare-warp
-```
-По умолчанию proxy доступен только с localhost.
-
-Используется zapret1, если конфиг умрет, поменяйте в /config
-
-## Стратегия zapret
-
-`config/zapret1-warp.conf` адаптирован из `general.bat` проекта
-`zapret-discord-youtube` версии `1.10.4`: семь основных профилей в исходном
-порядке, без дополнительных профилей Game Filter (в исходном архиве он выключен).
-Параметры WinDivert `--wf-tcp`/`--wf-udp` заменены существующими правилами
-Linux OUTPUT/NFQUEUE; границы перехвата пакетов для WARP сохранены.
-Списки доменов/IP и пользовательские исключения не заменялись.
-
-Штатный вариант совпадает с проверенным `general`: UDP fake/repeats=6,
-TCP multisplit с Google TLS/overlap=681 и 4pda TLS/overlap=568.
-Payload-файлы сверяются по SHA-256 в регрессионных тестах.
-Перед NFQUEUE устанавливается ACCEPT для пакетов с меткой nfqws
-`0x40000000/0x40000000`, чтобы сгенерированные пакеты не попадали
-на повторную обработку. Правило удаляется при завершении; повторная
-установка не создаёт дублей.
-Смена стратегии не является подтверждённым исправлением утечки памяти.
-
-Конфиг и payload-файлы включены в образ: после изменения нужна пересборка.
-До запуска WARP можно проверить аргументы настоящим nfqws без регистрации,
-сетевого перехвата и изменения состояния:
-
-```bash
-docker compose build
-docker compose run --rm --no-deps --entrypoint /usr/bin/bash warp-zapret1 -lc \
-  'set -e; source /config/zapret1-warp.conf; exec /usr/local/bin/nfqws --dry-run --qnum="$NFQUEUE_NUM" "${NFQWS_ARGS[@]}"'
-```
-
-Регрессионная проверка профилей и payload-файлов (Python 3 и Docker):
+После сборки образа запустите тесты (Python 3.10+ и Docker):
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-### Перенос на сервер
+Тесты не регистрируют WARP и не доказывают работоспособность обхода
+у конкретного провайдера.
 
-Проверенный локально туннель использовал сохранённую регистрацию.
-Успешная новая регистрация через API и суточная стабильность пока не доказаны.
-Сборка использует неприкреплённые версии upstream: проверяйте фактический
-образ и версии WARP/nfqws, а не только имя стратегии.
+## Лицензия
 
-Перед обновлением сохраните прежний образ, Compose/config и резервную копию
-state volume при остановленном WARP. Не используйте `docker compose down -v`.
-Начните с контролируемого запуска на целевом сервере и проверьте оба прокси,
-память, OOM и журнал. Для отката нужны прежние образ/config и сохранённый state;
-не запускайте одновременно два туннеля с копиями одной регистрации.
+Собственный код — [MIT](LICENSE). Сторонние компоненты и условия
+их распространения — [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+MIT не распространяется автоматически на клиент WARP и Linux-пакеты.

@@ -1,0 +1,127 @@
+{
+  "project": "zapret-discord-youtube",
+  "version": "1.10.4",
+  "game_filter": false,
+  "strategies": {
+    "alt": {
+      "source": "general (ALT).bat",
+      "sha256": "233512a3275cd934f27b20dc33cb058794f4fcc2c5ef58694651c84b07d3b538",
+      "profiles": 7
+    },
+    "alt10": {
+      "source": "general (ALT10).bat",
+      "sha256": "00c31ee7bc3f41a79209cbd0e9e60a04033b8b6844e1e6b8157faf2a1da0cb5f",
+      "profiles": 7
+    },
+    "alt11": {
+      "source": "general (ALT11).bat",
+      "sha256": "6003f63ed86e6b5d4b6a3f3a6d38d710af6a7d515325dfc7ad0ce77e85961b0d",
+      "profiles": 7
+    },
+    "alt12": {
+      "source": "general (ALT12).bat",
+      "sha256": "e6f24c3048bca3ad4dbf408afe23c2e1a2ef3dc6ff20ecc4c37df64022101ead",
+      "profiles": 7
+    },
+    "alt13": {
+      "source": "general (ALT13).bat",
+      "sha256": "0ef7279f222ced580f002c4073cc431307a368d6a70016489fc09e7a1741b0f8",
+      "profiles": 7
+    },
+    "alt2": {
+      "source": "general (ALT2).bat",
+      "sha256": "f928a447fd312866c02e3a06519537c892424c9133a6ec91ee741664ff17595e",
+      "profiles": 7
+    },
+    "alt3": {
+      "source": "general (ALT3).bat",
+      "sha256": "0229d59773af1717d54906873245e3598c00457514178b0e96500780277cea53",
+      "profiles": 7
+    },
+    "alt4": {
+      "source": "general (ALT4).bat",
+      "sha256": "497c19483a59f3d55a740ce5d45abb1d7429e2f6dc52e39d5e18b6941b8290cf",
+      "profiles": 7
+    },
+    "alt5": {
+      "source": "general (ALT5).bat",
+      "sha256": "a81c276ecae34c3c39c5d862bbf1ef841ff04864bd854485178adf5a8121f9f8",
+      "profiles": 4
+    },
+    "alt6": {
+      "source": "general (ALT6).bat",
+      "sha256": "ed7a09a6686191fa8a2bf733b5b4d26fefa45c92b62266e1f94bb56aeffcd079",
+      "profiles": 7
+    },
+    "alt7": {
+      "source": "general (ALT7).bat",
+      "sha256": "57cb714ea0e385ab3cea37543fd9ac7d591142571192217b39a6ce7c04f85f15",
+      "profiles": 7
+    },
+    "alt8": {
+      "source": "general (ALT8).bat",
+      "sha256": "4fa90488f6df6f6311fa75a811e1753567c454ebde0ee1484550fb2beed44204",
+      "profiles": 7
+    },
+    "alt9": {
+      "source": "general (ALT9).bat",
+      "sha256": "56430f0594058f6a1585509a0b52a532348d9e9913c723a4952fa8009c079d43",
+      "profiles": 7
+    },
+    "exp": {
+      "source": "general (EXP).bat",
+      "sha256": "e5b8eb98c6a3258969bda9274894f85551d37eec0352df806b0a1fb41b74f17b",
+      "profiles": 7
+    },
+    "fake-tls-auto": {
+      "source": "general (FAKE TLS AUTO).bat",
+      "sha256": "b181d1db261ba06d5b54baff123d491c6900174bbc22a2a237f9135160b7a948",
+      "profiles": 7
+    },
+    "fake-tls-auto-alt": {
+      "source": "general (FAKE TLS AUTO ALT).bat",
+      "sha256": "aa026f4030c17f1bf515389c903dc922992dfe29f6affff8494fa1548d1480a7",
+      "profiles": 7
+    },
+    "fake-tls-auto-alt2": {
+      "source": "general (FAKE TLS AUTO ALT2).bat",
+      "sha256": "0efa20276b94eb675730dc5920c42d8606e93adcaba186fc0306f978c49e8dd7",
+      "profiles": 7
+    },
+    "fake-tls-auto-alt3": {
+      "source": "general (FAKE TLS AUTO ALT3).bat",
+      "sha256": "604015c6716f8e52f2b95aa3b1d8690661e4dc7963b3efbbf4ab19fe5f45b4ff",
+      "profiles": 7
+    },
+    "general": {
+      "source": "general.bat",
+      "sha256": "2c0723be1d3539a70392607b9cf2ef590efcceec8e6139b1a0d2984ea1da1947",
+      "profiles": 7
+    },
+    "simple-fake": {
+      "source": "general (SIMPLE FAKE).bat",
+      "sha256": "f6371c618951df2989db86e717beb4a8440ad9a405a592a85d2c7bffaeac0bb3",
+      "profiles": 7
+    },
+    "simple-fake-alt": {
+      "source": "general (SIMPLE FAKE ALT).bat",
+      "sha256": "8bffa109e32aabb0360b2dc6be055687a884945fd62fcbe8fa73bdb4f3910df5",
+      "profiles": 7
+    },
+    "simple-fake-alt2": {
+      "source": "general (SIMPLE FAKE ALT2).bat",
+      "sha256": "16d3f5350f24ce87cd3ec43e0639b76cbd71a53766672939df09cb9d50449fb1",
+      "profiles": 7
+    }
+  },
+  "payloads": {
+    "ACTIVE_DISCORD_UDP.bin": "2fe18b3bd20807d36704d0b072092ee49ae84edca907a4420ab9a0f0f28fddcf",
+    "quic_initial_www_google_com.bin": "f4589c57749f956bb30538197a521d7005f8b0a8723b4707e72405e51ddac50a",
+    "stun.bin": "9cd5469309780ca56c0bd97266524a48c7ee529d02c3179cfecb20b260a59641",
+    "stun2.bin": "b7c2497496039c541f7337ac8536813f0a1cf52363ab2faa5213b7816d458813",
+    "tls_clienthello_4pda_to.bin": "eefeaf09dde8d69b1f176212541f63c68b314a33a335eced99a8a29f17254da8",
+    "tls_clienthello_sochi_park.bin": "ad552922acfe029521da884ea29f4bb28bb6bdcee9b1a70b46adbfd266c11d4d",
+    "tls_clienthello_www_google_com.bin": "936c2bee4cfb80aa3c426b2dcbcc834b3fbcd1adb17172959dc569c73a14275c",
+    "tls_clienthello_www_sferum_ru.bin": "e6dd8d724eecc6a7340bf64e2ebec81c60bc4e078c6f702b4b6ba9bf184180ad"
+  }
+}
