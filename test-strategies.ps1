@@ -48,6 +48,21 @@ function Invoke-Docker {
     return $result
 }
 
+function Write-SummaryRow {
+    param([string]$Row)
+    Add-Content -LiteralPath $summary -Encoding UTF8 -Value $Row
+    $fields = $Row -split "`t"
+    $displayStability = if ($fields[5] -eq 'NOT_APPLICABLE') { '-' } else { $fields[5] }
+    $displayEffect = if ($fields[6] -eq 'NOT_APPLICABLE') { '-' } else { $fields[6] }
+    $displayTransport = if ($fields[9] -eq 'NOT_APPLICABLE') { '-' } else { $fields[9] }
+    $format = '{0,-22}  {1,-12}  {2,7}  {3,11}  {4}'
+    Write-Host ''
+    Write-Host ($format -f 'strategy', 'status', 'start_s', 'checks', 'stability')
+    Write-Host ($format -f $fields[0], $fields[1], $fields[2], "$($fields[3])/$($fields[4])", $displayStability)
+    Write-Host ("  effect={0}; recovered={1}; queue={2}; transport={3}" -f $displayEffect, $fields[7], $fields[8], $displayTransport)
+    Write-Host ''
+}
+
 function Test-Probe {
     param([string]$Proxy, [string]$Url, [string]$Type, [string]$Protocol, [string]$Kind)
     # Feed the literal bypass rule through stdin: Unix PowerShell expands '*'
@@ -228,13 +243,11 @@ try {
         Save-Check $check GUARD HTTP1.1
         if ($check.Http -ne '000' -or $check.Exit -ne 7) { throw "Closed proxy guard failed for $kind" }
     }
-    Write-Host $header
     $perRoute = $Rounds * (1 + 3 * $targets.Count + [int][bool]$DownloadUrl + [int][bool]$UploadUrl)
     $strategy = 'direct'; $connection = 1; $kind = 'DIRECT'; $passed = 0; $connectionPassed = 0
     Invoke-Requests 'http://127.0.0.1:1'
     $row = "direct`tREFERENCE`t0`t$passed`t$perRoute`tNOT_APPLICABLE`tNOT_APPLICABLE`t0`t0`tNOT_APPLICABLE"
-    Add-Content -LiteralPath $summary -Encoding UTF8 -Value $row
-    Write-Host $row
+    Write-SummaryRow $row
     Add-Content -LiteralPath $metadata -Encoding UTF8 -Value @("direct_reference_clean=$([int]$directClean)", 'host_route_isolation=NOT_ESTABLISHED')
     Invoke-Docker -DockerArgs @('volume', 'create', '--label', 'warp-zapret.strategy-test=true', $runId) | Out-Null
     $volume = $runId
@@ -329,8 +342,7 @@ try {
         }
         if (-not $queueKnown) { $queuePackets = 'UNKNOWN' }
         $row = "$strategy`t$status`t$startup`t$passed`t$total`t$stability`t$effect`t$recovered`t$queuePackets`tUNKNOWN"
-        Add-Content -LiteralPath $summary -Encoding UTF8 -Value $row
-        Write-Host $row
+        Write-SummaryRow $row
     }
     Write-Host 'AVAILABLE measures connectivity. OBSERVED_GAIN is a comparison, not proof of a particular desync profile.'
     $exitCode = if ($available -gt 0) { 0 } else { 1 }

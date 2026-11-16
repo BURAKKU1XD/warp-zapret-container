@@ -136,6 +136,17 @@ DETAILS="$REPORT/checks.tsv"
 ATTEMPTS="$REPORT/connections.tsv"
 HEADER=$'strategy\tstatus\tstartup_seconds\tpassed\ttotal\tstability\teffect\trecovered_checks\tqueue_packets\ttransport'
 printf '%s\n' "$HEADER" > "$SUMMARY"
+# Keep machine-readable TSV separate from the compact console presentation.
+write_summary() {
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$SUMMARY"
+  local display_stability="$6" display_effect="$7" display_transport="${10}"
+  [[ "$display_stability" != NOT_APPLICABLE ]] || display_stability=-
+  [[ "$display_effect" != NOT_APPLICABLE ]] || display_effect=-
+  [[ "$display_transport" != NOT_APPLICABLE ]] || display_transport=-
+  printf '\n%-22s  %-12s  %7s  %11s  %s\n' strategy status start_s checks stability
+  printf '%-22s  %-12s  %7s  %11s  %s\n' "$1" "$2" "$3" "$4/$5" "$display_stability"
+  printf '  effect=%s; recovered=%s; queue=%s; transport=%s\n\n' "$display_effect" "$8" "$9" "$display_transport"
+}
 printf 'strategy\tconnection\tround\tproxy\ttarget\tprotocol\tstatus\thttp_code\tseconds\tcurl_exit\tbytes\tttfb\n' > "$DETAILS"
 printf 'strategy\tconnection\tstartup\tstartup_seconds\tpassed\ttotal\tnfqws_alive\ttcp_packets\tudp_packets\ttransport\n' > "$ATTEMPTS"
 printf 'image=%s\nimage_id=%s\nrounds=%s\nconnections=%s\nstartup_timeout=%s\nrequest_timeout=%s\n' \
@@ -278,10 +289,9 @@ for kind in HTTP SOCKS; do
   probe "$proxy" https://example.invalid/ site HTTP1.1
   [[ "$code" == 000 && "$exit_code" == 7 ]] || die "Closed proxy guard failed for $kind"
 done
-printf '%s\n' "$HEADER"
 strategy=direct connection=1 kind=DIRECT passed=0 connection_passed=0
 run_requests http://127.0.0.1:1
-printf 'direct\tREFERENCE\t0\t%s\t%s\tNOT_APPLICABLE\tNOT_APPLICABLE\t0\t0\tNOT_APPLICABLE\n' "$passed" "$PER_ROUTE" | tee -a "$SUMMARY"
+write_summary direct REFERENCE 0 "$passed" "$PER_ROUTE" NOT_APPLICABLE NOT_APPLICABLE 0 0 NOT_APPLICABLE
 printf 'direct_reference_clean=%s\nhost_route_isolation=NOT_ESTABLISHED\n' "$DIRECT_CLEAN" >> "$REPORT/run.txt"
 
 docker volume create --label warp-zapret.strategy-test=true "$RUN_ID" >/dev/null
@@ -373,8 +383,8 @@ for strategy in warp-control "${STRATEGIES[@]}"; do
     if ((ready_count == CONNECTIONS && queue_known == 1 && queue_packets == 0 && alive_all == 0)); then control_valid=1; fi
   fi
   ((queue_known == 1)) || queue_packets=UNKNOWN
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tUNKNOWN\n' "$strategy" "$status" "$startup" "$passed" "$total" \
-    "$stability" "$effect" "$recovered" "$queue_packets" | tee -a "$SUMMARY"
+  write_summary "$strategy" "$status" "$startup" "$passed" "$total" \
+    "$stability" "$effect" "$recovered" "$queue_packets" UNKNOWN
 done
 echo 'AVAILABLE measures connectivity. OBSERVED_GAIN is a comparison, not proof of a particular desync profile.'
 ((available > 0)) || exit 1
