@@ -50,7 +50,7 @@ function Test-Probe {
         '--proto', '=https', '--write-out', "`n%{http_code}`t%{time_total}"
     )
     if ($Trace) { $curlArgs += @('--max-filesize', '4096') }
-    else { $curlArgs += @('--head', '--output', 'NUL') }
+    else { $curlArgs += @('--output', 'NUL') }
     $curlArgs += $Url
     $ErrorActionPreference = 'Continue'
     # The trace body contains an IP: keep it in memory, never in reports/logs.
@@ -158,6 +158,10 @@ try {
                 'create', '--name', "$runId-$strategy", '--init', '--restart', 'no',
                 '--memory', '256m', '--memory-swap', '256m',
                 '--env', 'MALLOC_TRIM_THRESHOLD_=1048576', '--env', 'MALLOC_MMAP_THRESHOLD_=1048576',
+                '--env', 'HTTP_PROXY=', '--env', 'HTTPS_PROXY=', '--env', 'ALL_PROXY=',
+                '--env', 'FTP_PROXY=', '--env', 'NO_PROXY=',
+                '--env', 'http_proxy=', '--env', 'https_proxy=', '--env', 'all_proxy=',
+                '--env', 'ftp_proxy=', '--env', 'no_proxy=',
                 '--cap-add', 'NET_ADMIN', '--cap-add', 'NET_RAW',
                 '--device', '/dev/net/tun:/dev/net/tun',
                 '--publish', '127.0.0.1::8888', '--publish', '127.0.0.1::1080',

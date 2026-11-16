@@ -152,7 +152,7 @@ probe() {
   if [[ "$is_trace" == yes ]]; then
     args+=(--max-filesize 4096)
   else
-    args+=(--head --output /dev/null)
+    args+=(--output /dev/null)
   fi
   output="$(curl "${args[@]}" "$url" 2>/dev/null)" || exit_code=$?
   code="${output##*$'\n'}"
@@ -186,6 +186,8 @@ for strategy in "${STRATEGIES[@]}"; do
   if ACTIVE="$(docker create --name "$RUN_ID-$strategy" --init --restart no \
     --memory 256m --memory-swap 256m --cap-add NET_ADMIN --cap-add NET_RAW \
     --env MALLOC_TRIM_THRESHOLD_=1048576 --env MALLOC_MMAP_THRESHOLD_=1048576 \
+    --env HTTP_PROXY= --env HTTPS_PROXY= --env ALL_PROXY= --env FTP_PROXY= --env NO_PROXY= \
+    --env http_proxy= --env https_proxy= --env all_proxy= --env ftp_proxy= --env no_proxy= \
     --device /dev/net/tun:/dev/net/tun \
     --publish 127.0.0.1::8888 --publish 127.0.0.1::1080 \
     --mount "type=volume,src=$VOLUME,dst=/var/lib/cloudflare-warp" \

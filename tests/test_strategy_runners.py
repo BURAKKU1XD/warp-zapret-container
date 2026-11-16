@@ -115,7 +115,9 @@ elif tool == "curl":
               ("off" if strategy == "alt2" else "on"))
         print("\n200\t0.010")
     else:
-        assert "--head" in args
+        if scenario == "body-fail" and "--head" not in args:
+            print("\n200\t0.020")
+            sys.exit(18)  # headers succeeded, response body was truncated
         print("\n" + ("503" if strategy == "alt4" else "204") + "\t0.020")
 else:
     raise AssertionError(tool)
@@ -243,6 +245,30 @@ class RunnerTests(unittest.TestCase):
                 result, summary, _, _, remaining = self.run_runner(runner, strategies=["general", "general"])
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual([row["strategy"] for row in summary], ["general"])
+                self.assertEqual(remaining, {})
+
+    def test_container_cannot_inherit_docker_proxy_settings(self):
+        for runner in self.runners:
+            with self.subTest(runner=runner):
+                result, _, _, commands, _ = self.run_runner(runner, strategies=["general"])
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                create = next(c for c in commands if c[:2] == ["docker", "create"])
+                environment = [create[i + 1] for i, arg in enumerate(create) if arg == "--env"]
+                for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "FTP_PROXY", "NO_PROXY"):
+                    for key in (name, name.lower()):
+                        self.assertIn(key + "=", environment)
+
+    def test_successful_headers_with_failed_body_do_not_pass(self):
+        for runner in self.runners:
+            with self.subTest(runner=runner):
+                result, summary, checks, _, remaining = self.run_runner(
+                    runner, strategies=["general"], scenario="body-fail",
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertEqual(summary[0]["status"], "PARTIAL")
+                self.assertEqual(summary[0]["passed"], "2")  # only WARP trace passed
+                sites = [row for row in checks if row["target"] != "WARP"]
+                self.assertTrue(all(row["status"] == "FAIL" and row["curl_exit"] == "18" for row in sites))
                 self.assertEqual(remaining, {})
 
     def test_no_pass_does_not_name_a_winner(self):
