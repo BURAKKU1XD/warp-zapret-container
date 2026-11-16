@@ -4,6 +4,7 @@ set -Eeuo pipefail
 STRATEGY="${ZAPRET_STRATEGY:-general}"
 STRATEGY_EXPLICIT=0
 DRY_RUN=0
+WITHOUT_ZAPRET=0
 
 list_strategies() {
   local file
@@ -16,6 +17,15 @@ list_strategies() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --without-zapret)
+      WITHOUT_ZAPRET=1
+      shift
+      ;;
+    --test-diagnostics)
+      source /runtime.sh
+      strategy_diagnostics
+      exit
+      ;;
     --strategy)
       if [ "$#" -lt 2 ] || [ -z "$2" ] || [[ "$2" == --* ]]; then
         echo "[!] --strategy requires a name (see --list-strategies)" >&2
@@ -34,7 +44,8 @@ while [ "$#" -gt 0 ]; do
       exit 0
       ;;
     --help|-h)
-      echo "Usage: /entrypoint.sh [--strategy NAME] [--dry-run]"
+      echo "Usage: /entrypoint.sh [--strategy NAME] [--dry-run] [--without-zapret]"
+      echo "       /entrypoint.sh --test-diagnostics (numeric test evidence only)"
       echo "       /entrypoint.sh --list-strategies"
       echo "Selection: --strategy > CONFIG > ZAPRET_STRATEGY > general"
       exit 0
@@ -74,8 +85,6 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 source /runtime.sh
-
-configure_dns
 
 cleanup_rules() {
   while iptables -t mangle -D OUTPUT \
@@ -143,9 +152,10 @@ cleanup() {
   kill_pid "${WARP_PID:-}"
   kill_pid "${NFQWS_PID:-}"
 
-  cleanup_rules
+  if [ "$WITHOUT_ZAPRET" = 0 ]; then cleanup_rules; fi
 }
 # Runtime starts here.
+configure_dns
 trap cleanup EXIT
 trap 'exit 0' TERM
 trap 'exit 130' INT
@@ -166,12 +176,14 @@ dbus-daemon --system --fork || true
 
 echo "[+] starting nfqws"
 
+if [ "$WITHOUT_ZAPRET" = 0 ]; then
 /usr/local/bin/nfqws \
   --qnum="$NFQUEUE_NUM" \
   "${NFQWS_ARGS[@]}" \
   &
 
 NFQWS_PID="$!"
+printf '%s\n' "$NFQWS_PID" > /run/warp-zapret.nfqws.pid
 
 sleep 1
 
@@ -183,6 +195,9 @@ fi
 setup_rules
 
 iptables -t mangle -vnL OUTPUT
+else
+  echo "[+] control run: nfqws and NFQUEUE disabled"
+fi
 
 echo "[+] starting warp-svc"
 rm -f /var/lib/cloudflare-warp/mdm.xml 2>/dev/null || true
@@ -268,7 +283,7 @@ echo "[+] test HTTP from host:  curl -x http://127.0.0.1:$PUBLIC_HTTP_PROXY_PORT
 echo "[+] test SOCKS from host: curl --socks5-hostname 127.0.0.1:$PUBLIC_SOCKS_PROXY_PORT https://www.cloudflare.com/cdn-cgi/trace"
 
 while true; do
-  if ! kill -0 "$NFQWS_PID" 2>/dev/null; then
+  if [ "$WITHOUT_ZAPRET" = 0 ] && ! kill -0 "$NFQWS_PID" 2>/dev/null; then
     echo "[!] nfqws exited"
     exit 1
   fi

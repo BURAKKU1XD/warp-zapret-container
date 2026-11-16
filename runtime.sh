@@ -40,6 +40,21 @@ configure_dns() {
   echo "[+] DNS configured: ${nameservers[*]}"
 }
 
+# Tab-separated, bounded evidence; never expose addresses or daemon trace bodies.
+strategy_diagnostics() {
+  local alive=0 pid="" counters
+  if [ -r /run/warp-zapret.nfqws.pid ]; then
+    read -r pid < /run/warp-zapret.nfqws.pid
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then alive=1; fi
+  fi
+  counters="$(iptables -t mangle -nvxL OUTPUT 2>/dev/null | awk '
+    $3 == "NFQUEUE" && $4 == "tcp" { tcp += $1 }
+    $3 == "NFQUEUE" && $4 == "udp" { udp += $1 }
+    END { printf "%.0f\t%.0f", tcp, udp }')" || return 1
+  # MASQUE configuration and UDP socket presence do not prove negotiated H3/H2.
+  printf '%s\t%s\tUNKNOWN\n' "$alive" "$counters"
+}
+
 filter_warp_log() {
   local line
   while IFS= read -r line || [ -n "$line" ]; do
