@@ -12,8 +12,7 @@ IMAGE = "warp-zapret1-container-warp-zapret1:latest"
 PAYLOAD_HASHES = {
     "quic_initial_www_google_com.bin": "f4589c57749f956bb30538197a521d7005f8b0a8723b4707e72405e51ddac50a",
     "tls_clienthello_www_google_com.bin": "936c2bee4cfb80aa3c426b2dcbcc834b3fbcd1adb17172959dc569c73a14275c",
-    "stun.bin": "9cd5469309780ca56c0bd97266524a48c7ee529d02c3179cfecb20b260a59641",
-    "tls_clienthello_www_sferum_ru.bin": "e6dd8d724eecc6a7340bf64e2ebec81c60bc4e078c6f702b4b6ba9bf184180ad",
+    "tls_clienthello_4pda_to.bin": "eefeaf09dde8d69b1f176212541f63c68b314a33a335eced99a8a29f17254da8",
     "ACTIVE_DISCORD_UDP.bin": "2fe18b3bd20807d36704d0b072092ee49ae84edca907a4420ab9a0f0f28fddcf",
 }
 
@@ -40,9 +39,9 @@ def run_in_image(script, net_admin=False):
     return result.stdout
 
 
-class Alt12Tests(unittest.TestCase):
+class GeneralTests(unittest.TestCase):
     def test_ordered_arguments_match_upstream_profiles(self):
-        fixture = ROOT / "tests/fixtures/alt12-1.10.4.txt"
+        fixture = ROOT / "tests/fixtures/general-1.10.4.txt"
         profiles = []
         for line in fixture.read_text(encoding="utf-8").splitlines():
             if not line or line.startswith("#"):
@@ -90,7 +89,59 @@ class Alt12Tests(unittest.TestCase):
         self.assertEqual(actual, PAYLOAD_HASHES)
 
     def test_bash_syntax(self):
-        run_in_image("bash -n /entrypoint.sh /config/zapret1-warp.conf")
+        run_in_image("bash -n /entrypoint.sh && bash -n /config/zapret1-warp.conf")
+
+    def test_image_configuration_matches_source(self):
+        for name in ("entrypoint.sh", "config/zapret1-warp.conf"):
+            with self.subTest(file=name):
+                source = (ROOT / name).read_text(encoding="utf-8")
+                source = source.replace("#!/usr/bin/env bash", "#!/usr/bin/bash", 1)
+                self.assertEqual(run_in_image(f"cat /{name}").decode(), source)
+
+    def test_generated_mark_order_idempotence_and_cleanup(self):
+        # Load only definitions; do not start dbus, nfqws or WARP.
+        output = run_in_image(
+            r'''set -eu
+source <(while IFS= read -r line; do
+  [[ "$line" == 'trap cleanup INT TERM EXIT' ]] && break
+  printf '%s\n' "$line"
+done < /entrypoint.sh)
+iptables -t mangle -A OUTPUT -m mark --mark 0x40000000/0x40000000 -j ACCEPT
+for i in 1 2; do
+  iptables -t mangle -A OUTPUT -m mark --mark 0x40000000/0x40000000 \
+    -m comment --comment warp-zapret1-generated -j ACCEPT
+done
+setup_rules >/dev/null
+setup_rules >/dev/null
+echo SETUP
+iptables -t mangle -S OUTPUT
+cleanup_rules
+cleanup_rules
+echo CLEANUP
+iptables -t mangle -S OUTPUT
+''',
+            net_admin=True,
+        ).decode()
+        installed, cleaned = output.split("CLEANUP\n")
+        rules = [line for line in installed.splitlines() if line.startswith("-A OUTPUT")]
+        self.assertEqual(len(rules), 4)
+        self.assertIn("--mark 0x40000000/0x40000000", rules[0])
+        self.assertIn("warp-zapret1-generated", rules[0])
+        self.assertTrue(rules[0].endswith("-j ACCEPT"))
+        self.assertIn("-p udp", rules[2])
+        self.assertIn("-p tcp", rules[3])
+        self.assertIn("--dports 443,19294:19344,50000:50100", rules[2])
+        self.assertIn("--connbytes 1:12", rules[2])
+        self.assertIn("--dports 80,443,2053,2083,2087,2096,8443", rules[3])
+        self.assertIn("--connbytes 1:40", rules[3])
+        for rule in rules[2:]:
+            self.assertIn("! -d 127.0.0.0/8", rule)
+            self.assertIn("--connbytes-mode packets --connbytes-dir original", rule)
+            self.assertIn("-j NFQUEUE --queue-num 200 --queue-bypass", rule)
+        remaining = [line for line in cleaned.splitlines() if line.startswith("-A OUTPUT")]
+        self.assertEqual(len(remaining), 1)
+        self.assertIn("--mark 0x40000000/0x40000000 -j ACCEPT", remaining[0])
+        self.assertNotIn("warp-zapret1-generated", remaining[0])
 
     def test_nfqws_accepts_all_profiles_and_assets(self):
         run_in_image(

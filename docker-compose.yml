@@ -9,6 +9,8 @@ services:
 
     restart: unless-stopped
     init: true
+    mem_limit: 256m
+    memswap_limit: 256m
 
     cap_add:
       - NET_ADMIN
@@ -26,6 +28,10 @@ services:
 
     environment:
       CONFIG: /config/zapret1-warp.conf
+
+      # Balanced glibc reuse/release thresholds (1 MiB).
+      MALLOC_TRIM_THRESHOLD_: "1048576"
+      MALLOC_MMAP_THRESHOLD_: "1048576"
 
       # WARP internal proxy
       WARP_PROXY_PORT: "40000"

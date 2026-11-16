@@ -27,6 +27,37 @@ cleanup_rules() {
     --connbytes-mode packets \
     --connbytes-dir original \
     -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass 2>/dev/null; do true; done
+
+  while iptables -t mangle -D OUTPUT \
+    -m mark --mark 0x40000000/0x40000000 \
+    -m comment --comment warp-zapret1-generated \
+    -j ACCEPT 2>/dev/null; do true; done
+}
+
+setup_rules() {
+  cleanup_rules
+
+  # nfqws-generated packets must bypass NFQUEUE (default desync fwmark).
+  iptables -t mangle -I OUTPUT 1 \
+    -m mark --mark 0x40000000/0x40000000 \
+    -m comment --comment warp-zapret1-generated \
+    -j ACCEPT
+
+  echo "[+] queue UDP ports $NFQWS_PORTS_UDP, packets $NFQWS_UDP_CONNBYTES"
+  iptables -t mangle -A OUTPUT \
+    -p udp -m multiport --dports "$NFQWS_PORTS_UDP" ! -d 127.0.0.0/8 \
+    -m connbytes --connbytes "$NFQWS_UDP_CONNBYTES" \
+    --connbytes-mode packets \
+    --connbytes-dir original \
+    -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass
+
+  echo "[+] queue TCP ports $NFQWS_PORTS_TCP, packets $NFQWS_TCP_CONNBYTES"
+  iptables -t mangle -A OUTPUT \
+    -p tcp -m multiport --dports "$NFQWS_PORTS_TCP" ! -d 127.0.0.0/8 \
+    -m connbytes --connbytes "$NFQWS_TCP_CONNBYTES" \
+    --connbytes-mode packets \
+    --connbytes-dir original \
+    -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass
 }
 
 kill_pid() {
@@ -56,17 +87,13 @@ mkdir -p /run/dbus
 rm -f /run/dbus/pid
 dbus-daemon --system --fork || true
 
-echo "[+] cleanup iptables"
-cleanup_rules
-
 echo "[+] checking assets"
 test -s /config/lists/list-general.txt
 test -s /config/lists/ipset-all.txt
 test -s /opt/zapret/files/fake/quic_initial_www_google_com.bin
 test -s /opt/zapret/files/fake/tls_clienthello_www_google_com.bin
-test -s /opt/zapret/files/fake/stun.bin
 test -s /opt/zapret/files/fake/ACTIVE_DISCORD_UDP.bin
-test -s /opt/zapret/files/fake/tls_clienthello_www_sferum_ru.bin
+test -s /opt/zapret/files/fake/tls_clienthello_4pda_to.bin
 
 echo "[+] starting nfqws"
 : > "$NFQWS_LOG"
@@ -86,21 +113,7 @@ if ! kill -0 "$NFQWS_PID" 2>/dev/null; then
   exit 1
 fi
 
-echo "[+] queue UDP ports $NFQWS_PORTS_UDP, packets $NFQWS_UDP_CONNBYTES"
-iptables -t mangle -A OUTPUT \
-  -p udp -m multiport --dports "$NFQWS_PORTS_UDP" ! -d 127.0.0.0/8 \
-  -m connbytes --connbytes "$NFQWS_UDP_CONNBYTES" \
-  --connbytes-mode packets \
-  --connbytes-dir original \
-  -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass
-
-echo "[+] queue TCP ports $NFQWS_PORTS_TCP, packets $NFQWS_TCP_CONNBYTES"
-iptables -t mangle -A OUTPUT \
-  -p tcp -m multiport --dports "$NFQWS_PORTS_TCP" ! -d 127.0.0.0/8 \
-  -m connbytes --connbytes "$NFQWS_TCP_CONNBYTES" \
-  --connbytes-mode packets \
-  --connbytes-dir original \
-  -j NFQUEUE --queue-num "$NFQUEUE_NUM" --queue-bypass
+setup_rules
 
 iptables -t mangle -vnL OUTPUT
 
