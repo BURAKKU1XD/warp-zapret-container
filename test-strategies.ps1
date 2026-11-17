@@ -28,6 +28,7 @@ Usage: .\test-strategies.ps1 [-Image IMAGE] [-Pull missing|always|never]
 Order: direct host reference, WARP without zapret, selected strategies.
 Download checks exact size/SHA256; upload endpoint must echo 65536 zero bytes.
 Targets file: one public HTTPS URL per line; # comments allowed.
+Reports separate URL success, HTTPS reachability, stability, and control comparison.
 Requires Docker Desktop (Linux/amd64 containers), curl.exe and /dev/net/tun.
 Tests accept Cloudflare's terms and create a temporary WARP registration.
 Only runner-owned containers and the temporary volume are removed.
@@ -57,9 +58,10 @@ function Write-SummaryRow {
     $displayTransport = if ($fields[9] -eq 'NOT_APPLICABLE') { '-' } else { $fields[9] }
     $format = '{0,-22}  {1,-12}  {2,7}  {3,11}  {4}'
     Write-Host ''
-    Write-Host ($format -f 'strategy', 'status', 'start_s', 'checks', 'stability')
+    Write-Host ($format -f 'strategy', 'url_status', 'start_s', 'url_checks', 'https_stability')
     Write-Host ($format -f $fields[0], $fields[1], $fields[2], "$($fields[3])/$($fields[4])", $displayStability)
     Write-Host ("  effect={0}; recovered={1}; queue={2}; transport={3}" -f $displayEffect, $fields[7], $fields[8], $displayTransport)
+    Write-Host ("  https_status={0}; https_checks={1}/{2}" -f $fields[10], $fields[11], $fields[4])
     Write-Host ''
 }
 
@@ -113,23 +115,28 @@ function Test-Probe {
     elseif ($exit -eq 35 -or $exit -eq 60) { $status = 'TLS_ERROR' }
     elseif ($exit -eq 28) { $status = 'TIMEOUT' }
     elseif ($http -match '^[45][0-9]{2}$') { $status = 'HTTP_ERROR' }
+    # HTTP errors prove HTTPS reachability, while content remains unsuccessful.
+    # Trace and optional transfers retain their WARP and integrity requirements.
+    $httpsStatus = if ($status -eq 'PASS' -or ($Type -eq 'site' -and $exit -eq 0 -and $http -match '^[2-5][0-9]{2}$')) { 'PASS' } else { 'FAIL' }
     if ($Kind -eq 'DIRECT' -and $Type -eq 'trace' -and $status -ne 'PASS') { $script:directClean = $false }
-    return [pscustomobject]@{ Status=$status; Http=$http; Seconds=$seconds; Exit=$exit; Bytes=$bytes; Ttfb=$ttfb }
+    return [pscustomobject]@{ Status=$status; Http=$http; Seconds=$seconds; Exit=$exit; Bytes=$bytes; Ttfb=$ttfb; HttpsStatus=$httpsStatus }
 }
 function Save-Check {
     param($Check, [string]$Target, [string]$Protocol)
     if ($Target -eq 'GUARD' -or $Target -eq 'STOPPED_PROXY') {
+        $Check.HttpsStatus = 'NOT_APPLICABLE'
         $Check.Status = if ($Check.Http -eq '000' -and $Check.Exit -eq 7) { 'EXPECTED_REFUSAL' } else { 'GUARD_FAIL' }
     }
-    Add-Content -LiteralPath $details -Encoding UTF8 -Value "$strategy`t$connection`t$round`t$kind`t$Target`t$Protocol`t$($Check.Status)`t$($Check.Http)`t$($Check.Seconds)`t$($Check.Exit)`t$($Check.Bytes)`t$($Check.Ttfb)"
-    if ($Check.Status -eq 'PASS') { $script:passed++; $script:connectionPassed++ }
+    Add-Content -LiteralPath $details -Encoding UTF8 -Value "$strategy`t$connection`t$round`t$kind`t$Target`t$Protocol`t$($Check.Status)`t$($Check.Http)`t$($Check.Seconds)`t$($Check.Exit)`t$($Check.Bytes)`t$($Check.Ttfb)`t$($Check.HttpsStatus)"
     if ($Target -eq 'GUARD' -or $Target -eq 'STOPPED_PROXY') { return }
+    if ($Check.HttpsStatus -eq 'PASS') { $script:httpsPassed++ }
+    if ($Check.Status -eq 'PASS') { $script:passed++; $script:connectionPassed++ }
     $key = "$kind|$Target|$Protocol"
     if ($strategy -eq 'warp-control') {
-        if ($Check.Status -eq 'PASS') { $controlGood[$key] = $true }
+        if ($Check.HttpsStatus -eq 'PASS') { $controlGood[$key] = $true }
         elseif ($Check.Status -ne 'UNSUPPORTED') { $controlBad[$key] = $true }
     } elseif ($strategy -ne 'direct') {
-        if ($Check.Status -eq 'PASS') { $currentGood[$key] = $true } else { $currentBad[$key] = $true }
+        if ($Check.HttpsStatus -eq 'PASS') { $currentGood[$key] = $true } else { $currentBad[$key] = $true }
     }
 }
 function Invoke-Requests {
@@ -219,13 +226,13 @@ try {
     $summary = Join-Path $report 'summary.tsv'
     $details = Join-Path $report 'checks.tsv'
     $attempts = Join-Path $report 'connections.tsv'
-    $header = "strategy`tstatus`tstartup_seconds`tpassed`ttotal`tstability`teffect`trecovered_checks`tqueue_packets`ttransport"
+    $header = "strategy`tstatus`tstartup_seconds`tpassed`ttotal`tstability`teffect`trecovered_checks`tqueue_packets`ttransport`thttps_status`thttps_passed"
     Set-Content -LiteralPath $summary -Value $header -Encoding UTF8
-    Set-Content -LiteralPath $details -Value "strategy`tconnection`tround`tproxy`ttarget`tprotocol`tstatus`thttp_code`tseconds`tcurl_exit`tbytes`tttfb" -Encoding UTF8
+    Set-Content -LiteralPath $details -Value "strategy`tconnection`tround`tproxy`ttarget`tprotocol`tstatus`thttp_code`tseconds`tcurl_exit`tbytes`tttfb`thttps_status" -Encoding UTF8
     Set-Content -LiteralPath $attempts -Value "strategy`tconnection`tstartup`tstartup_seconds`tpassed`ttotal`tnfqws_alive`ttcp_packets`tudp_packets`ttransport" -Encoding UTF8
     $metadata = Join-Path $report 'run.txt'
     Set-Content -LiteralPath $metadata -Encoding UTF8 -Value @(
-        "report_version=2", "image=$Image", "image_id=$imageId", "rounds=$Rounds", "connections=$Connections",
+        "report_version=3", "image=$Image", "image_id=$imageId", "rounds=$Rounds", "connections=$Connections",
         "startup_timeout=$StartupTimeout", "request_timeout=$RequestTimeout",
         "download=$(if ($DownloadUrl) { $DownloadUrl } else { 'NOT_RUN' })",
         "download_bytes=$DownloadBytes", "download_sha256=$DownloadSha256",
@@ -244,17 +251,17 @@ try {
         if ($check.Http -ne '000' -or $check.Exit -ne 7) { throw "Closed proxy guard failed for $kind" }
     }
     $perRoute = $Rounds * (1 + 3 * $targets.Count + [int][bool]$DownloadUrl + [int][bool]$UploadUrl)
-    $strategy = 'direct'; $connection = 1; $kind = 'DIRECT'; $passed = 0; $connectionPassed = 0
+    $strategy = 'direct'; $connection = 1; $kind = 'DIRECT'; $passed = 0; $connectionPassed = 0; $httpsPassed = 0
     Invoke-Requests 'http://127.0.0.1:1'
-    $row = "direct`tREFERENCE`t0`t$passed`t$perRoute`tNOT_APPLICABLE`tNOT_APPLICABLE`t0`t0`tNOT_APPLICABLE"
+    $row = "direct`tREFERENCE`t0`t$passed`t$perRoute`tNOT_APPLICABLE`tNOT_APPLICABLE`t0`t0`tNOT_APPLICABLE`tREFERENCE`t$httpsPassed"
     Write-SummaryRow $row
     Add-Content -LiteralPath $metadata -Encoding UTF8 -Value @("direct_reference_clean=$([int]$directClean)", 'host_route_isolation=NOT_ESTABLISHED')
     Invoke-Docker -DockerArgs @('volume', 'create', '--label', 'warp-zapret.strategy-test=true', $runId) | Out-Null
     $volume = $runId
-    $available = 0; $controlPassed = 0
+    $available = 0; $controlHttpsPassed = 0
     foreach ($strategy in @('warp-control') + @($selected)) {
         Write-Host "Testing: $strategy ($Connections cold connections)"
-        $passed = 0; $startup = 0; $readyCount = 0; $queuePackets = 0L; $queueKnown = $true; $aliveAll = $true
+        $passed = 0; $httpsPassed = 0; $startup = 0; $readyCount = 0; $queuePackets = 0L; $queueKnown = $true; $aliveAll = $true
         $currentGood = @{}; $currentBad = @{}
         for ($connection = 1; $connection -le $Connections; $connection++) {
             $status = 'STARTUP_FAIL'; $connectionPassed = 0; $alive = '0'; $tcp = '0'; $udp = '0'; $transport = 'UNKNOWN'
@@ -326,25 +333,30 @@ try {
         $stability = 'FAIL'; $effect = 'NOT_ESTABLISHED'; $recovered = 0
         if ($passed -eq $total) {
             $status = 'AVAILABLE'
+        }
+        $httpsStatus = if ($readyCount -eq 0) { 'STARTUP_FAIL' } else { 'PARTIAL' }
+        if ($httpsPassed -eq $total) {
+            $httpsStatus = 'AVAILABLE'
             $stability = if ($Connections -gt 1 -and $Rounds -gt 1) { 'PASS' } else { 'INSUFFICIENT_SAMPLES' }
         }
         if ($strategy -eq 'warp-control') {
-            $controlPassed = $passed; $effect = 'CONTROL'
+            $controlHttpsPassed = $httpsPassed; $effect = 'CONTROL'
             $controlValid = $readyCount -eq $Connections -and $queueKnown -and $queuePackets -eq 0 -and -not $aliveAll
         }
         else {
             foreach ($key in $currentGood.Keys) {
                 if ($controlBad.ContainsKey($key) -and -not $controlGood.ContainsKey($key) -and -not $currentBad.ContainsKey($key)) { $recovered++ }
             }
-            if ($controlPassed -eq $total) { $effect = 'WARP_WORKS_WITHOUT_ZAPRET' }
+            if ($controlHttpsPassed -eq $total) { $effect = 'WARP_WORKS_WITHOUT_ZAPRET' }
             elseif ($recovered -gt 0 -and $queuePackets -gt 0 -and $queueKnown -and $aliveAll -and $directClean -and $controlValid -and $readyCount -eq $Connections) { $effect = 'OBSERVED_GAIN' }
             if ($status -eq 'AVAILABLE') { $available++ }
         }
         if (-not $queueKnown) { $queuePackets = 'UNKNOWN' }
-        $row = "$strategy`t$status`t$startup`t$passed`t$total`t$stability`t$effect`t$recovered`t$queuePackets`tUNKNOWN"
+        $row = "$strategy`t$status`t$startup`t$passed`t$total`t$stability`t$effect`t$recovered`t$queuePackets`tUNKNOWN`t$httpsStatus`t$httpsPassed"
         Write-SummaryRow $row
     }
-    Write-Host 'AVAILABLE measures connectivity. OBSERVED_GAIN is a comparison, not proof of a particular desync profile.'
+    Write-Host 'URL status requires HTTP 2xx. HTTPS status includes HTTP error responses; stability measures repeated HTTPS reachability.'
+    Write-Host 'OBSERVED_GAIN compares HTTPS reachability; it does not prove a particular desync profile.'
     $exitCode = if ($available -gt 0) { 0 } else { 1 }
 } catch {
     Write-Host "Runner failed: $($_.Exception.Message)" -ForegroundColor Red

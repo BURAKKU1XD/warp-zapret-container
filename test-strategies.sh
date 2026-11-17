@@ -42,7 +42,7 @@ Usage: bash test-strategies.sh [options]
   --upload-url URL         Optional POST endpoint echoing exactly 65536 zero bytes
   --help
 Order: direct host reference, WARP without zapret, selected strategies.
-Reports distinguish availability, stability, and observed gain over the control.
+Reports separate URL success, HTTPS reachability, stability, and control comparison.
 Exit codes: 0 = at least one AVAILABLE strategy, 1 = none available,
             2 = runner/preflight error, 130 = interrupted.
 Requires a local Linux/amd64 Docker daemon and /dev/net/tun.
@@ -134,24 +134,25 @@ mkdir -- "$REPORT"
 SUMMARY="$REPORT/summary.tsv"
 DETAILS="$REPORT/checks.tsv"
 ATTEMPTS="$REPORT/connections.tsv"
-HEADER=$'strategy\tstatus\tstartup_seconds\tpassed\ttotal\tstability\teffect\trecovered_checks\tqueue_packets\ttransport'
+HEADER=$'strategy\tstatus\tstartup_seconds\tpassed\ttotal\tstability\teffect\trecovered_checks\tqueue_packets\ttransport\thttps_status\thttps_passed'
 printf '%s\n' "$HEADER" > "$SUMMARY"
 # Keep machine-readable TSV separate from the compact console presentation.
 write_summary() {
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$SUMMARY"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$SUMMARY"
   local display_stability="$6" display_effect="$7" display_transport="${10}"
   [[ "$display_stability" != NOT_APPLICABLE ]] || display_stability=-
   [[ "$display_effect" != NOT_APPLICABLE ]] || display_effect=-
   [[ "$display_transport" != NOT_APPLICABLE ]] || display_transport=-
-  printf '\n%-22s  %-12s  %7s  %11s  %s\n' strategy status start_s checks stability
+  printf '\n%-22s  %-12s  %7s  %11s  %s\n' strategy url_status start_s url_checks https_stability
   printf '%-22s  %-12s  %7s  %11s  %s\n' "$1" "$2" "$3" "$4/$5" "$display_stability"
-  printf '  effect=%s; recovered=%s; queue=%s; transport=%s\n\n' "$display_effect" "$8" "$9" "$display_transport"
+  printf '  effect=%s; recovered=%s; queue=%s; transport=%s\n' "$display_effect" "$8" "$9" "$display_transport"
+  printf '  https_status=%s; https_checks=%s/%s\n\n' "${11}" "${12}" "$5"
 }
-printf 'strategy\tconnection\tround\tproxy\ttarget\tprotocol\tstatus\thttp_code\tseconds\tcurl_exit\tbytes\tttfb\n' > "$DETAILS"
+printf 'strategy\tconnection\tround\tproxy\ttarget\tprotocol\tstatus\thttp_code\tseconds\tcurl_exit\tbytes\tttfb\thttps_status\n' > "$DETAILS"
 printf 'strategy\tconnection\tstartup\tstartup_seconds\tpassed\ttotal\tnfqws_alive\ttcp_packets\tudp_packets\ttransport\n' > "$ATTEMPTS"
 printf 'image=%s\nimage_id=%s\nrounds=%s\nconnections=%s\nstartup_timeout=%s\nrequest_timeout=%s\n' \
   "$IMAGE" "$IMAGE_ID" "$ROUNDS" "$CONNECTIONS" "$STARTUP_TIMEOUT" "$REQUEST_TIMEOUT" > "$REPORT/run.txt"
-printf 'report_version=2\ndownload=%s\nupload=%s\nprofile_evidence=NOT_ESTABLISHED\nconfigured_transport=MASQUE_h3-with-h2-fallback\n' \
+printf 'report_version=3\ndownload=%s\nupload=%s\nprofile_evidence=NOT_ESTABLISHED\nconfigured_transport=MASQUE_h3-with-h2-fallback\n' \
   "${DOWNLOAD_URL:-NOT_RUN}" "${UPLOAD_URL:-NOT_RUN}" >> "$REPORT/run.txt"
 printf 'download_bytes=%s\ndownload_sha256=%s\n' "$DOWNLOAD_BYTES" "$DOWNLOAD_SHA256" >> "$REPORT/run.txt"
 ACTIVE="" VOLUME=""
@@ -245,24 +246,33 @@ probe() {
   elif [[ "$exit_code" == 28 ]]; then PROBE_STATUS=TIMEOUT
   elif [[ "$code" =~ ^[45][0-9]{2}$ ]]; then PROBE_STATUS=HTTP_ERROR
   fi
+  # An HTTP error is evidence of HTTPS reachability, not content success.
+  # Trace and optional transfers still require WARP and integrity validation.
+  PROBE_HTTPS_STATUS=FAIL
+  if [[ "$PROBE_STATUS" == PASS ]] ||
+    { [[ "$type" == site && "$code" =~ ^[2-5][0-9]{2}$ ]] && ((exit_code == 0)); }; then
+    PROBE_HTTPS_STATUS=PASS
+  fi
   if [[ "$target" == GUARD || "$target" == STOPPED_PROXY ]]; then
+    PROBE_HTTPS_STATUS=NOT_APPLICABLE
     PROBE_STATUS=GUARD_FAIL
     if [[ "$code" == 000 && "$exit_code" == 7 ]]; then PROBE_STATUS=EXPECTED_REFUSAL; fi
   fi
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$strategy" "$connection" "$round" "$kind" "$target" "$protocol" "$PROBE_STATUS" \
-    "$code" "$elapsed" "$exit_code" "$bytes" "$ttfb" >> "$DETAILS"
+    "$code" "$elapsed" "$exit_code" "$bytes" "$ttfb" "$PROBE_HTTPS_STATUS" >> "$DETAILS"
+  [[ "$target" != GUARD && "$target" != STOPPED_PROXY ]] || return 0
+  if [[ "$PROBE_HTTPS_STATUS" == PASS ]]; then https_passed=$((https_passed + 1)); fi
   if [[ "$PROBE_STATUS" == PASS ]]; then
     passed=$((passed + 1)); connection_passed=$((connection_passed + 1))
   fi
   if [[ "$kind" == DIRECT && "$type" == trace && "$PROBE_STATUS" != PASS ]]; then DIRECT_CLEAN=0; fi
   local key="$kind|$target|$protocol"
-  [[ "$target" != GUARD && "$target" != STOPPED_PROXY ]] || return 0
   if [[ "$strategy" == warp-control ]]; then
-    if [[ "$PROBE_STATUS" == PASS ]]; then CONTROL_GOOD[$key]=1
+    if [[ "$PROBE_HTTPS_STATUS" == PASS ]]; then CONTROL_GOOD[$key]=1
     elif [[ "$PROBE_STATUS" != UNSUPPORTED ]]; then CONTROL_BAD[$key]=1; fi
   elif [[ "$strategy" != direct ]]; then
-    if [[ "$PROBE_STATUS" == PASS ]]; then CURRENT_GOOD[$key]=1
+    if [[ "$PROBE_HTTPS_STATUS" == PASS ]]; then CURRENT_GOOD[$key]=1
     else CURRENT_BAD[$key]=1; fi
   fi
 }
@@ -289,9 +299,9 @@ for kind in HTTP SOCKS; do
   probe "$proxy" https://example.invalid/ site HTTP1.1
   [[ "$code" == 000 && "$exit_code" == 7 ]] || die "Closed proxy guard failed for $kind"
 done
-strategy=direct connection=1 kind=DIRECT passed=0 connection_passed=0
+strategy=direct connection=1 kind=DIRECT passed=0 connection_passed=0 https_passed=0
 run_requests http://127.0.0.1:1
-write_summary direct REFERENCE 0 "$passed" "$PER_ROUTE" NOT_APPLICABLE NOT_APPLICABLE 0 0 NOT_APPLICABLE
+write_summary direct REFERENCE 0 "$passed" "$PER_ROUTE" NOT_APPLICABLE NOT_APPLICABLE 0 0 NOT_APPLICABLE REFERENCE "$https_passed"
 printf 'direct_reference_clean=%s\nhost_route_isolation=NOT_ESTABLISHED\n' "$DIRECT_CLEAN" >> "$REPORT/run.txt"
 
 docker volume create --label warp-zapret.strategy-test=true "$RUN_ID" >/dev/null
@@ -299,7 +309,7 @@ VOLUME="$RUN_ID"
 available=0
 for strategy in warp-control "${STRATEGIES[@]}"; do
   echo "Testing: $strategy ($CONNECTIONS cold connections)" >&2
-  passed=0 startup=0 ready_count=0 queue_packets=0 queue_known=1 alive_all=1
+  passed=0 https_passed=0 startup=0 ready_count=0 queue_packets=0 queue_known=1 alive_all=1
   CURRENT_GOOD=() CURRENT_BAD=()
   for ((connection=1; connection<=CONNECTIONS; connection++)); do
     status=STARTUP_FAIL connection_passed=0 alive=0 tcp=0 udp=0 transport=UNKNOWN
@@ -367,6 +377,11 @@ for strategy in warp-control "${STRATEGIES[@]}"; do
   ((ready_count > 0)) || status=STARTUP_FAIL
   if ((passed == total)); then
     status=AVAILABLE
+  fi
+  https_status=PARTIAL
+  ((ready_count > 0)) || https_status=STARTUP_FAIL
+  if ((https_passed == total)); then
+    https_status=AVAILABLE
     if ((CONNECTIONS > 1 && ROUNDS > 1)); then stability=PASS; else stability=INSUFFICIENT_SAMPLES; fi
   fi
   if [[ "$strategy" != warp-control ]]; then
@@ -375,16 +390,17 @@ for strategy in warp-control "${STRATEGIES[@]}"; do
         recovered=$((recovered + 1))
       fi
     done
-    if ((control_passed == total)); then effect=WARP_WORKS_WITHOUT_ZAPRET
+    if ((control_https_passed == total)); then effect=WARP_WORKS_WITHOUT_ZAPRET
     elif ((recovered > 0 && queue_packets > 0 && queue_known == 1 && alive_all == 1 && DIRECT_CLEAN == 1 && control_valid == 1 && ready_count == CONNECTIONS)); then effect=OBSERVED_GAIN; fi
     [[ "$status" != AVAILABLE ]] || available=$((available + 1))
   else
-    control_passed=$passed; effect=CONTROL; control_valid=0
+    control_https_passed=$https_passed; effect=CONTROL; control_valid=0
     if ((ready_count == CONNECTIONS && queue_known == 1 && queue_packets == 0 && alive_all == 0)); then control_valid=1; fi
   fi
   ((queue_known == 1)) || queue_packets=UNKNOWN
   write_summary "$strategy" "$status" "$startup" "$passed" "$total" \
-    "$stability" "$effect" "$recovered" "$queue_packets" UNKNOWN
+    "$stability" "$effect" "$recovered" "$queue_packets" UNKNOWN "$https_status" "$https_passed"
 done
-echo 'AVAILABLE measures connectivity. OBSERVED_GAIN is a comparison, not proof of a particular desync profile.'
+echo 'URL status requires HTTP 2xx. HTTPS status includes HTTP error responses; stability measures repeated HTTPS reachability.'
+echo 'OBSERVED_GAIN compares HTTPS reachability; it does not prove a particular desync profile.'
 ((available > 0)) || exit 1

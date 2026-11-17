@@ -106,6 +106,19 @@ elif tool == 'curl':
         print('ip=192.0.2.123\nregistration=DO_NOT_SAVE\nwarp='+warp)
         result()
     else:
+        if scenario.startswith('http-errors'):
+            key = stage + '|' + proxy + '|' + args[-1] + '|' + str('--tlsv1.3' in args) + '|' + str('--tlsv1.2' in args)
+            counts_file = root / 'probe-counts.json'
+            counts = json.loads(counts_file.read_text()) if counts_file.exists() else {}
+            seen = counts.get(key, 0)
+            counts[key] = seen + 1
+            counts_file.write_text(json.dumps(counts))
+            if scenario == 'http-errors-timeout' and seen == 0:
+                result('000'); sys.exit(28)
+            if scenario == 'http-errors-body':
+                result('404'); sys.exit(18)
+            if scenario != 'http-errors-gain' or stage != 'general':
+                result('403' if args[-1].endswith('/denied') else '404'); sys.exit(0)
         if scenario=='body-fail': result(size=20); sys.exit(18)
         sink=args[args.index('--output')+1]
         size=0
@@ -222,6 +235,10 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(summary[2]['passed'], '8')
                 self.assertEqual(summary[0]['passed'], '4')
                 self.assertEqual(summary[2]['effect'], 'WARP_WORKS_WITHOUT_ZAPRET')
+                # Connected without warp=on is still a failed HTTPS path check.
+                self.assertEqual(summary[4]['https_status'], 'PARTIAL')
+                self.assertEqual(summary[5]['https_status'], 'PARTIAL')  # TLS failure
+                self.assertEqual(summary[6]['https_status'], 'AVAILABLE')  # HTTP 503
                 self.assertEqual({r['protocol'] for r in checks}, {'DEFAULT','HTTP1.1','TLS1.2','TLS1.3'})
                 self.assertEqual(remaining, {})
                 curls = [c for c in commands if c[0]=='curl']
@@ -249,6 +266,7 @@ class RunnerTests(unittest.TestCase):
                 self.assertEqual(result.returncode,1,result.stdout+result.stderr)
                 self.assertEqual(summary[-1]['passed'],'2')
                 self.assertEqual(summary[-1]['status'],'PARTIAL')
+                self.assertEqual(summary[-1]['https_status'],'PARTIAL')
                 sites=[r for r in checks if r['strategy']=='general' and r['target'].startswith('https:')]
                 self.assertEqual(len(sites),6)
                 self.assertTrue(all(r['status']=='FAIL' and r['curl_exit']=='18' for r in sites))
@@ -273,6 +291,51 @@ class RunnerTests(unittest.TestCase):
                     self.assertIn('--no-healthcheck',create)
                 self.assertEqual(remaining,{})
 
+    def test_http_errors_are_reachable_but_not_content_success(self):
+        for runner in self.runners:
+            with self.subTest(runner=runner):
+                result, summary, checks, _, remaining = self.run_runner(
+                    runner, strategies=['general'], scenario='http-errors',
+                    targets='https://example.com/denied\nhttps://example.com/missing\n',
+                    connections=2, rounds=2,
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                row = summary[-1]
+                self.assertEqual(row['status'], 'PARTIAL')
+                self.assertEqual(row['passed'], '8')
+                self.assertEqual(row['total'], '56')
+                self.assertEqual(row['https_passed'], '56')
+                self.assertEqual(row['https_status'], 'AVAILABLE')
+                self.assertEqual(row['stability'], 'PASS')
+                self.assertEqual(row['effect'], 'WARP_WORKS_WITHOUT_ZAPRET')
+                sites = [r for r in checks if r['strategy'] == 'general' and r['target'].startswith('https:')]
+                self.assertEqual({r['http_code'] for r in sites}, {'403', '404'})
+                self.assertTrue(all(r['status'] == 'HTTP_ERROR' and r['https_status'] == 'PASS' for r in sites))
+                self.assertEqual(remaining, {})
+
+    def test_http_response_changes_do_not_claim_connectivity_gain(self):
+        for runner in self.runners:
+            with self.subTest(runner=runner):
+                result, summary, _, _, _ = self.run_runner(
+                    runner, strategies=['general'], scenario='http-errors-gain',
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(summary[-1]['effect'], 'WARP_WORKS_WITHOUT_ZAPRET')
+                self.assertEqual(summary[-1]['recovered_checks'], '0')
+                self.assertEqual(summary[-1]['stability'], 'INSUFFICIENT_SAMPLES')
+
+    def test_http_errors_do_not_hide_timeouts_or_incomplete_bodies(self):
+        for runner in self.runners:
+            for scenario in ('http-errors-timeout', 'http-errors-body'):
+                with self.subTest(runner=runner, scenario=scenario):
+                    result, summary, _, _, _ = self.run_runner(
+                        runner, strategies=['general'], scenario=scenario,
+                        connections=2, rounds=2,
+                    )
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertEqual(summary[-1]['https_status'], 'PARTIAL')
+                    self.assertEqual(summary[-1]['stability'], 'FAIL')
+
     def test_guard_failure_aborts_before_resources(self):
         for runner in self.runners:
             result, _, _, commands, remaining = self.run_runner(runner,scenario='guard-bypass',strategies=['general'])
@@ -287,6 +350,7 @@ class RunnerTests(unittest.TestCase):
                     result, summary, checks, _, _ = self.run_runner(runner,scenario=scenario,strategies=['general'])
                     self.assertEqual(result.returncode,1,result.stdout+result.stderr)
                     self.assertEqual(summary[-1]['status'],'PARTIAL')
+                    self.assertEqual(summary[-1]['https_status'],'PARTIAL')
                     self.assertTrue(any(r['status']==status for r in checks))
 
     def test_invalid_inputs_and_old_image_fail_before_creating_resources(self):
@@ -326,6 +390,7 @@ class RunnerTests(unittest.TestCase):
                 result,summary,checks,_,remaining=self.run_runner(runner,strategies=['general'],extra=extra,scenario=scenario)
                 self.assertEqual(result.returncode,code,result.stdout+result.stderr)
                 self.assertEqual(summary[-1]['status'],'AVAILABLE' if code==0 else 'PARTIAL')
+                self.assertEqual(summary[-1]['https_status'],'AVAILABLE' if code==0 else 'PARTIAL')
                 self.assertEqual(remaining,{})
 
     def test_real_direct_request_ignores_proxy_environment(self):
